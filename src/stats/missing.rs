@@ -367,7 +367,16 @@ pub fn analyze_missing_data(
         }
         .to_string();
         let interpretation = if total_missing_cells == 0 {
-            "Datasettet har ingen manglende verdier (0% missing). Littles MCAR-test er ikke nødvendig.".to_string()
+            crate::i18n::tr(
+                "Datasettet har ingen manglende verdier (0% missing). Littles MCAR-test er ikke nødvendig.",
+                "Dataset has no missing values (0% missing). Little's MCAR test is not needed.",
+            )
+            .to_string()
+        } else if crate::i18n::is_en() {
+            format!(
+                "Found {} missing cells ({:.2}%), but fewer than 2 numeric columns with missing values for Little's MCAR test.",
+                total_missing_cells, overall_missing_pct
+            )
         } else {
             format!(
                 "Fant {} manglende celler ({:.2}%), men færre enn 2 numeriske kolonner med manglende verdier for Littles MCAR-test.",
@@ -375,9 +384,17 @@ pub fn analyze_missing_data(
             )
         };
         let recommendation = if total_missing_cells == 0 {
-            "Alle observasjoner er komplette — ingen imputering nødvendig.".to_string()
+            crate::i18n::tr(
+                "Alle observasjoner er komplette — ingen imputering nødvendig.",
+                "All observations are complete — no imputation required.",
+            )
+            .to_string()
         } else {
-            "Undersøk mønsteret i kategoriske/manglende felt før videre modellering.".to_string()
+            crate::i18n::tr(
+                "Undersøk mønsteret i kategoriske/manglende felt før videre modellering.",
+                "Inspect the missingness pattern in categorical/missing fields before further modeling.",
+            )
+            .to_string()
         };
 
         return MissingDataReport {
@@ -460,9 +477,21 @@ pub fn analyze_missing_data(
 
     let status = if is_mcar { "warning" } else { "fail" }.to_string();
     let interpretation = if is_mcar {
+        if crate::i18n::is_en() {
+            format!(
+                "Little's MCAR test: χ²({}) = {:.3}, p = {:.4} (>= {:.2}). Data are consistent with MCAR (Missing Completely At Random), with {:.2}% missing cells.",
+                df, d2, p_val, alpha, overall_missing_pct
+            )
+        } else {
+            format!(
+                "Littles MCAR-test: χ²({}) = {:.3}, p = {:.4} (>= {:.2}). Data er forenlig med MCAR (tilfeldig manglende), men {:.2}% av cellene mangler.",
+                df, d2, p_val, alpha, overall_missing_pct
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Littles MCAR-test: χ²({}) = {:.3}, p = {:.4} (>= {:.2}). Data er forenlig med MCAR (tilfeldig manglende), men {:.2}% av cellene mangler.",
-            df, d2, p_val, alpha, overall_missing_pct
+            "Little's MCAR test rejected! χ²({}) = {:.3}, p = {:.4} (< {:.2}). Missing data are NOT completely random (MAR/MNAR).",
+            df, d2, p_val, alpha
         )
     } else {
         format!(
@@ -472,9 +501,17 @@ pub fn analyze_missing_data(
     };
 
     let recommendation = if is_mcar {
-        "MCAR-forutsetningen er ikke forkastet, men multippel imputering (MICE) eller FIML (beregnet under) bevarer statistisk styrke fremfor listwise deletion.".to_string()
+        crate::i18n::tr(
+            "MCAR-forutsetningen er ikke forkastet, men multippel imputering (MICE) eller FIML (beregnet under) bevarer statistisk styrke fremfor listwise deletion.",
+            "MCAR assumption is not rejected, yet multiple imputation (MICE) or FIML (computed below) preserves statistical power over listwise deletion.",
+        )
+        .to_string()
     } else {
-        "Unngå sletting av rader (listwise deletion) da det gir skjevhet! Bruk multippel imputering (MICE) eller FIML (EM-estimatene og MICE-sammendraget er beregnet under).".to_string()
+        crate::i18n::tr(
+            "Unngå sletting av rader (listwise deletion) da det gir skjevhet! Bruk multippel imputering (MICE) eller FIML (EM-estimatene og MICE-sammendraget er beregnet under).",
+            "Avoid listwise deletion as it introduces bias! Use multiple imputation (MICE) or FIML (EM estimates and MICE summary are computed below).",
+        )
+        .to_string()
     };
 
     MissingDataReport {

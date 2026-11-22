@@ -324,8 +324,20 @@ pub fn check_normality(variable: &str, data: &[f64], alpha: f64) -> Result<Norma
     .to_string();
 
     let interpretation = if is_normal {
+        if crate::i18n::is_en() {
+            format!(
+                "No significant deviation from normality ({}, p = {:.4} >= {:.2}). Skewness = {:.3}, excess kurtosis = {:.3}.",
+                recommended_test, primary_p_value, alpha, skew, kurt
+            )
+        } else {
+            format!(
+                "Ingen signifikant avvik fra normalfordeling ({}, p = {:.4} >= {:.2}). Skjevhet = {:.3}, eksess-kurtose = {:.3}.",
+                recommended_test, primary_p_value, alpha, skew, kurt
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Ingen signifikant avvik fra normalfordeling ({}, p = {:.4} >= {:.2}). Skjevhet = {:.3}, eksess-kurtose = {:.3}.",
+            "Significant deviation from normality ({}, p = {:.4} < {:.2}). Skewness = {:.3}, excess kurtosis = {:.3}.",
             recommended_test, primary_p_value, alpha, skew, kurt
         )
     } else {
@@ -336,9 +348,17 @@ pub fn check_normality(variable: &str, data: &[f64], alpha: f64) -> Result<Norma
     };
 
     let recommendation = if is_normal {
-        "Parametriske metoder (t-test, ANOVA, OLS) er egnet med hensyn til normalitet.".to_string()
+        crate::i18n::tr(
+            "Parametriske metoder (t-test, ANOVA, OLS) er egnet med hensyn til normalitet.",
+            "Parametric methods (t-test, ANOVA, OLS) are appropriate with respect to normality.",
+        )
+        .to_string()
     } else {
-        "Normalitetsforutsetningen er brutt. Bruk ikke-parametrisk test (Mann-Whitney U / Kruskal-Wallis) eller bootstrapping (beregnet nedenfor).".to_string()
+        crate::i18n::tr(
+            "Normalitetsforutsetningen er brutt. Bruk ikke-parametrisk test (Mann-Whitney U / Kruskal-Wallis) eller bootstrapping (beregnet nedenfor).",
+            "Normality assumption is violated. Use non-parametric tests (Mann-Whitney U / Kruskal-Wallis) or bootstrapping (computed below).",
+        )
+        .to_string()
     };
 
     Ok(NormalityCheck {

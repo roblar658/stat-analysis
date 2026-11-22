@@ -451,20 +451,46 @@ pub fn analyze_clustering(
     }
     .to_string();
 
-    let interpretation = format!(
-        "Høyeste gjennomsnittlige Silhouette-skår = {:.3} ved k = {} klynger. Elbow-metoden foreslår k = {} klynger. DBSCAN (eps={:.2}) fant {} klynger ({} støypunkter).",
-        best_sil, best_k, elbow_k, dbscan_fallback.eps, dbscan_fallback.n_clusters, dbscan_fallback.noise_points
-    );
+    let interpretation = if crate::i18n::is_en() {
+        format!(
+            "Highest mean Silhouette score = {:.3} at k = {} clusters. Elbow method suggests k = {} clusters. DBSCAN (eps={:.2}) found {} clusters ({} noise points).",
+            best_sil, best_k, elbow_k, dbscan_fallback.eps, dbscan_fallback.n_clusters, dbscan_fallback.noise_points
+        )
+    } else {
+        format!(
+            "Høyeste gjennomsnittlige Silhouette-skår = {:.3} ved k = {} klynger. Elbow-metoden foreslår k = {} klynger. DBSCAN (eps={:.2}) fant {} klynger ({} støypunkter).",
+            best_sil, best_k, elbow_k, dbscan_fallback.eps, dbscan_fallback.n_clusters, dbscan_fallback.noise_points
+        )
+    };
 
     let recommendation = if best_sil >= 0.5 {
-        format!(
-            "Tydelig klyngestruktur (Silhouette = {:.3} >= 0.50). K-means med k = {} anbefales.",
-            best_sil, best_k
-        )
+        if crate::i18n::is_en() {
+            format!(
+                "Clear cluster structure (Silhouette = {:.3} >= 0.50). K-means with k = {} is recommended.",
+                best_sil, best_k
+            )
+        } else {
+            format!(
+                "Tydelig klyngestruktur (Silhouette = {:.3} >= 0.50). K-means med k = {} anbefales.",
+                best_sil, best_k
+            )
+        }
     } else if best_sil >= 0.25 {
+        if crate::i18n::is_en() {
+            format!(
+                "Moderate cluster separation (Silhouette = {:.3}). Compare K-means k = {} (Silhouette) / k = {} (Elbow) with DBSCAN ({} clusters).",
+                best_sil, best_k, elbow_k, dbscan_fallback.n_clusters
+            )
+        } else {
+            format!(
+                "Moderat klyngeseparasjon (Silhouette = {:.3}). Sammenlign K-means k = {} (Silhouette) / k = {} (Elbow) med DBSCAN ({} klynger).",
+                best_sil, best_k, elbow_k, dbscan_fallback.n_clusters
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Moderat klyngeseparasjon (Silhouette = {:.3}). Sammenlign K-means k = {} (Silhouette) / k = {} (Elbow) med DBSCAN ({} klynger).",
-            best_sil, best_k, elbow_k, dbscan_fallback.n_clusters
+            "Weak K-means separation (Silhouette = {:.3} < 0.25). DBSCAN fallback computed (eps = {:.2}, {} clusters, {} noise points).",
+            best_sil, dbscan_fallback.eps, dbscan_fallback.n_clusters, dbscan_fallback.noise_points
         )
     } else {
         format!(

@@ -49,12 +49,7 @@ pub fn status_dot_color(status: &str) -> Color32 {
 }
 
 pub fn status_label(status: &str) -> &'static str {
-    match status {
-        "ok" => "OK",
-        "warning" => "ADVARSEL",
-        "fail" => "BRUTT",
-        _ => "N/A",
-    }
+    crate::i18n::status_label(status)
 }
 
 pub fn status_badge(ui: &mut Ui, status: &str) {
@@ -186,7 +181,12 @@ pub fn callout_box(ui: &mut Ui, status: &str, interpretation: &str, recommendati
             if !recommendation.is_empty() {
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("Anbefalt tiltak:").color(TEXT_PRIMARY).strong().size(13.0));
+                    ui.label(
+                        RichText::new(crate::i18n::tr("Anbefalt tiltak:", "Recommended action:"))
+                            .color(TEXT_PRIMARY)
+                            .strong()
+                            .size(13.0),
+                    );
                     ui.label(RichText::new(recommendation).color(TEXT_SECONDARY).size(13.0));
                 });
             }
@@ -222,7 +222,7 @@ pub fn kpi_card(ui: &mut Ui, title: &str, value: &str, sub: Option<&str>) {
 pub fn save_svg_button(ui: &mut Ui, default_filename: &str, svg_builder: impl FnOnce() -> String) {
     if ui
         .add(
-            Button::new(RichText::new("Lagre SVG...").size(12.0).color(TEXT_PRIMARY))
+            Button::new(RichText::new(crate::i18n::tr("Lagre SVG...", "Save SVG...")).size(12.0).color(TEXT_PRIMARY))
                 .fill(Color32::from_rgb(241, 245, 249))
                 .stroke(Stroke::new(1.0_f32, Color32::from_rgb(148, 163, 184))),
         )
@@ -230,7 +230,7 @@ pub fn save_svg_button(ui: &mut Ui, default_filename: &str, svg_builder: impl Fn
     {
         if let Some(path) = rfd::FileDialog::new()
             .set_file_name(default_filename)
-            .add_filter("SVG vektorgrafikk", &["svg"])
+            .add_filter(crate::i18n::tr("SVG vektorgrafikk", "SVG vector graphics"), &["svg"])
             .save_file()
         {
             let svg = svg_builder();

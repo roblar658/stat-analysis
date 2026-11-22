@@ -426,28 +426,28 @@ pub fn analyze_logistic_regression(
     let (roc_points, auc, confusion_matrix) = compute_roc_auc(y, &fit.probs);
 
     let auc_label = if auc >= 0.9 {
-        "Fremragende (> 0.90)"
+        crate::i18n::tr("Fremragende (> 0.90)", "Outstanding (> 0.90)")
     } else if auc >= 0.8 {
-        "God (> 0.80)"
+        crate::i18n::tr("God (> 0.80)", "Good (> 0.80)")
     } else if auc >= 0.7 {
-        "Akseptabel (> 0.70)"
+        crate::i18n::tr("Akseptabel (> 0.70)", "Acceptable (> 0.70)")
     } else if auc >= 0.6 {
-        "Svak (0.60–0.70)"
+        crate::i18n::tr("Svak (0.60–0.70)", "Weak (0.60–0.70)")
     } else {
-        "Dårlig / nær tilfeldig (<= 0.60)"
+        crate::i18n::tr("Dårlig / nær tilfeldig (<= 0.60)", "Poor / near random (<= 0.60)")
     }
     .to_string();
 
     let mut model_comparison = vec![
         LogisticModelCompare {
-            model_name: "Full logistisk modell".to_string(),
+            model_name: crate::i18n::tr("Full logistisk modell", "Full logistic model").to_string(),
             k_params: k,
             log_likelihood: fit.log_likelihood,
             aic,
             bic,
         },
         LogisticModelCompare {
-            model_name: "Nullmodell (kun konstantledd)".to_string(),
+            model_name: crate::i18n::tr("Nullmodell (kun konstantledd)", "Null model (intercept only)").to_string(),
             k_params: 1,
             log_likelihood: null_ll,
             aic: 2.0 - 2.0 * null_ll,
@@ -496,9 +496,9 @@ pub fn analyze_logistic_regression(
         hl.chi2_stat,
         hl.p_value,
         if hl.good_fit {
-            "god tilpasning"
+            crate::i18n::tr("god tilpasning", "good fit")
         } else {
-            "tegn til manglende tilpasning"
+            crate::i18n::tr("tegn til manglende tilpasning", "signs of lack of fit")
         },
         auc,
         auc_label,
@@ -506,11 +506,23 @@ pub fn analyze_logistic_regression(
     );
 
     let recommendation = if hl.good_fit && auc >= 0.7 {
-        "Logistisk modell viser både god kalibrering (Hosmer-Lemeshow p > 0.05) og akseptabel/god diskriminering (AUC > 0.7).".to_string()
+        crate::i18n::tr(
+            "Logistisk modell viser både god kalibrering (Hosmer-Lemeshow p > 0.05) og akseptabel/god diskriminering (AUC > 0.7).",
+            "Logistic model shows both good calibration (Hosmer-Lemeshow p > 0.05) and acceptable/good discrimination (AUC > 0.7).",
+        )
+        .to_string()
     } else if !hl.good_fit {
-        "Hosmer-Lemeshow p < 0.05 indikerer feilkalibrering. Vurder interaksjonsledd, ikke-lineære ledd (splines/polynomer) eller færre uteliggere.".to_string()
+        crate::i18n::tr(
+            "Hosmer-Lemeshow p < 0.05 indikerer feilkalibrering. Vurder interaksjonsledd, ikke-lineære ledd (splines/polynomer) eller færre uteliggere.",
+            "Hosmer-Lemeshow p < 0.05 indicates miscalibration. Consider interaction terms, nonlinear terms (splines/polynomials), or outlier review.",
+        )
+        .to_string()
     } else {
-        "Lav AUC (< 0.70): modellen skiller svakt mellom klassene. Vurder sterkere prediktorer eller ikke-lineære klassifikasjonsmodeller.".to_string()
+        crate::i18n::tr(
+            "Lav AUC (< 0.70): modellen skiller svakt mellom klassene. Vurder sterkere prediktorer eller ikke-lineære klassifikasjonsmodeller.",
+            "Low AUC (< 0.70): weak class separation. Consider stronger predictors or nonlinear classification models.",
+        )
+        .to_string()
     };
 
     Ok(LogisticReport {

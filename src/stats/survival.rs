@@ -367,9 +367,21 @@ pub fn analyze_cox_ph(
     .to_string();
 
     let interpretation = if ph_met {
+        if crate::i18n::is_en() {
+            format!(
+                "Proportional hazards assumption is met (Schoenfeld global χ²({}) = {:.3}, p = {:.4} > {:.2}). Concordance (C-index) = {:.3}.",
+                p, global_chi2, global_p, alpha, concordance_c
+            )
+        } else {
+            format!(
+                "Proporsjonal hasard-forutsetningen er oppfylt (Schoenfeld global χ²({}) = {:.3}, p = {:.4} > {:.2}). Konkordans (C-index) = {:.3}.",
+                p, global_chi2, global_p, alpha, concordance_c
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Proporsjonal hasard-forutsetningen er oppfylt (Schoenfeld global χ²({}) = {:.3}, p = {:.4} > {:.2}). Konkordans (C-index) = {:.3}.",
-            p, global_chi2, global_p, alpha, concordance_c
+            "Proportional hazards assumption appears violated (Schoenfeld global χ²({}) = {:.3}, p = {:.4}). Hazard ratio varies over time.",
+            p, global_chi2, global_p
         )
     } else {
         format!(
@@ -379,9 +391,17 @@ pub fn analyze_cox_ph(
     };
 
     let recommendation = if ph_met {
-        "Standard Cox proporsjonal hasard-modell er gyldig — risikoforholdet er tilnærmet konstant over tid.".to_string()
+        crate::i18n::tr(
+            "Standard Cox proporsjonal hasard-modell er gyldig — risikoforholdet er tilnærmet konstant over tid.",
+            "Standard Cox proportional hazards model is valid — hazard ratio is approximately constant over time.",
+        )
+        .to_string()
     } else {
-        "PH-forutsetningen er brutt: tidsavhengig hazard-ratio (tidlig t25 vs. sen t75 basert på beta(t) ~ ln(tid)) er beregnet per kovariat i tabellen under.".to_string()
+        crate::i18n::tr(
+            "PH-forutsetningen er brutt: tidsavhengig hazard-ratio (tidlig t25 vs. sen t75 basert på beta(t) ~ ln(tid)) er beregnet per kovariat i tabellen under.",
+            "PH assumption violated: time-varying hazard ratio (early t25 vs. late t75 based on beta(t) ~ ln(time)) is computed per covariate in the table below.",
+        )
+        .to_string()
     };
 
     Ok(CoxSurvivalReport {

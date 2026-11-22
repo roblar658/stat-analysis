@@ -106,17 +106,17 @@ fn compute_kmo_and_msa(corr: &[Vec<f64>]) -> (f64, Vec<f64>, f64) {
 
 fn kmo_rating(kmo: f64) -> &'static str {
     if kmo >= 0.9 {
-        "Utmerket (Marvelous, >= 0.90)"
+        crate::i18n::tr("Utmerket (Marvelous, >= 0.90)", "Marvelous (>= 0.90)")
     } else if kmo >= 0.8 {
-        "Svært god (Meritorious, 0.80–0.89)"
+        crate::i18n::tr("Svært god (Meritorious, 0.80–0.89)", "Meritorious (0.80–0.89)")
     } else if kmo >= 0.7 {
-        "Middels god (Middling, 0.70–0.79)"
+        crate::i18n::tr("Middels god (Middling, 0.70–0.79)", "Middling (0.70–0.79)")
     } else if kmo >= 0.6 {
-        "Akseptabel (Mediocre, 0.60–0.69)"
+        crate::i18n::tr("Akseptabel (Mediocre, 0.60–0.69)", "Mediocre (0.60–0.69)")
     } else if kmo >= 0.5 {
-        "Svak (Miserable, 0.50–0.59)"
+        crate::i18n::tr("Svak (Miserable, 0.50–0.59)", "Miserable (0.50–0.59)")
     } else {
-        "Uegnet (Unacceptable, < 0.50)"
+        crate::i18n::tr("Uegnet (Unacceptable, < 0.50)", "Unacceptable (< 0.50)")
     }
 }
 
@@ -202,25 +202,51 @@ pub fn check_factor_suitability(
     }
     .to_string();
 
-    let interpretation = format!(
-        "KMO = {:.3} ({}), Bartletts sfærisitetstest: χ²({}) = {:.2}, p = {:.4}. Kaisers kriterium (egenverdi > 1) foreslår {} faktorer/komponenter.",
-        kmo_overall,
-        kmo_rating(kmo_overall),
-        bartlett_df,
-        bartlett_chi2,
-        bartlett_p_value,
-        kaiser_num_factors
-    );
+    let interpretation = if crate::i18n::is_en() {
+        format!(
+            "KMO = {:.3} ({}), Bartlett's test of sphericity: χ²({}) = {:.2}, p = {:.4}. Kaiser's criterion (eigenvalue > 1) suggests {} factors/components.",
+            kmo_overall,
+            kmo_rating(kmo_overall),
+            bartlett_df,
+            bartlett_chi2,
+            bartlett_p_value,
+            kaiser_num_factors
+        )
+    } else {
+        format!(
+            "KMO = {:.3} ({}), Bartletts sfærisitetstest: χ²({}) = {:.2}, p = {:.4}. Kaisers kriterium (egenverdi > 1) foreslår {} faktorer/komponenter.",
+            kmo_overall,
+            kmo_rating(kmo_overall),
+            bartlett_df,
+            bartlett_chi2,
+            bartlett_p_value,
+            kaiser_num_factors
+        )
+    };
 
     let recommendation = if suitable {
-        "Dataene er godt egnet for PCA / Eksplorativ faktoranalyse (KMO > 0.6 og Bartlett p < 0.05).".to_string()
+        crate::i18n::tr(
+            "Dataene er godt egnet for PCA / Eksplorativ faktoranalyse (KMO > 0.6 og Bartlett p < 0.05).",
+            "Data are well suited for PCA / Exploratory Factor Analysis (KMO > 0.6 and Bartlett p < 0.05).",
+        )
+        .to_string()
     } else if !suggested_drop.is_empty() {
         if let Some(new_kmo) = kmo_after_drop {
-            format!(
-                "Fjern variabler med lav korrelasjon/MSA ({}) — dette endrer KMO til {:.3}.",
-                suggested_drop.join(", "),
-                new_kmo
-            )
+            if crate::i18n::is_en() {
+                format!(
+                    "Drop variables with low correlation/MSA ({}) — this changes KMO to {:.3}.",
+                    suggested_drop.join(", "),
+                    new_kmo
+                )
+            } else {
+                format!(
+                    "Fjern variabler med lav korrelasjon/MSA ({}) — dette endrer KMO til {:.3}.",
+                    suggested_drop.join(", "),
+                    new_kmo
+                )
+            }
+        } else if crate::i18n::is_en() {
+            format!("Drop variables with low correlation to others: {}.", suggested_drop.join(", "))
         } else {
             format!(
                 "Fjern variabler med lav korrelasjon til resten: {}.",
@@ -228,7 +254,11 @@ pub fn check_factor_suitability(
             )
         }
     } else {
-        "Korrelasjonene mellom variablene er for svake for meningsfull faktoranalyse.".to_string()
+        crate::i18n::tr(
+            "Korrelasjonene mellom variablene er for svake for meningsfull faktoranalyse.",
+            "Correlations among variables are too weak for meaningful factor analysis.",
+        )
+        .to_string()
     };
 
     Ok(FactorSuitabilityReport {

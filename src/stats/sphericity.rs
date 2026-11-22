@@ -136,9 +136,21 @@ pub fn check_sphericity(
 
     let status = if sphericity_met { "ok" } else { "fail" }.to_string();
     let interpretation = if sphericity_met {
+        if crate::i18n::is_en() {
+            format!(
+                "Sphericity is met (Mauchly's W = {:.4}, p = {:.4} >= {:.2}). Uncorrected RM-ANOVA F = {:.3}, p = {:.4}.",
+                mauchly_w, mauchly_p_value, alpha, rm_anova_f, p_uncorrected
+            )
+        } else {
+            format!(
+                "Sfærisitet er oppfylt (Mauchlys W = {:.4}, p = {:.4} >= {:.2}). Ukorrigert RM-ANOVA F = {:.3}, p = {:.4}.",
+                mauchly_w, mauchly_p_value, alpha, rm_anova_f, p_uncorrected
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Sfærisitet er oppfylt (Mauchlys W = {:.4}, p = {:.4} >= {:.2}). Ukorrigert RM-ANOVA F = {:.3}, p = {:.4}.",
-            mauchly_w, mauchly_p_value, alpha, rm_anova_f, p_uncorrected
+            "Sphericity is violated (Mauchly's W = {:.4}, p = {:.4} < {:.2}). GG ε = {:.3} (p = {:.4}), HF ε = {:.3} (p = {:.4}).",
+            mauchly_w, mauchly_p_value, alpha, epsilon_gg, p_greenhouse_geisser, epsilon_hf, p_huynh_feldt
         )
     } else {
         format!(
@@ -148,11 +160,27 @@ pub fn check_sphericity(
     };
 
     let recommendation = if sphericity_met {
-        "Du kan bruke standard ukorrigerte frihetsgrader i Repeated Measures ANOVA.".to_string()
+        crate::i18n::tr(
+            "Du kan bruke standard ukorrigerte frihetsgrader i Repeated Measures ANOVA.",
+            "Standard uncorrected degrees of freedom in Repeated Measures ANOVA can be used.",
+        )
+        .to_string()
     } else if epsilon_gg < 0.75 {
+        if crate::i18n::is_en() {
+            format!(
+                "Use Greenhouse-Geisser correction (ε = {:.3} < 0.75, corrected p = {:.4}).",
+                epsilon_gg, p_greenhouse_geisser
+            )
+        } else {
+            format!(
+                "Bruk Greenhouse-Geisser-korreksjon (ε = {:.3} < 0.75, korrigert p = {:.4}).",
+                epsilon_gg, p_greenhouse_geisser
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Bruk Greenhouse-Geisser-korreksjon (ε = {:.3} < 0.75, korrigert p = {:.4}).",
-            epsilon_gg, p_greenhouse_geisser
+            "Use Huynh-Feldt correction (ε_GG = {:.3} >= 0.75, HF corrected p = {:.4}) or Greenhouse-Geisser (p = {:.4}).",
+            epsilon_gg, p_huynh_feldt, p_greenhouse_geisser
         )
     } else {
         format!(

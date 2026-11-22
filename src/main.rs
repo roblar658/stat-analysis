@@ -2,6 +2,7 @@
 
 mod auto;
 mod data;
+mod i18n;
 mod plots;
 mod report;
 mod stats;
@@ -11,6 +12,7 @@ mod ui;
 
 use crate::auto::run_automatic_analysis;
 use crate::data::Dataset;
+use crate::i18n::{set_lang, tr, Lang};
 use crate::report::{build_zip_bundle, render_markdown_report, render_pdf_report};
 use clap::Parser;
 use std::fs;
@@ -20,27 +22,32 @@ use std::path::PathBuf;
 #[command(
     name = "stat-analysis",
     version,
-    about = "stat-analysis — Profesjonelt desktop-program i ren Rust for automatisk og manuell statistisk forutsetningssjekk, modellkvalitet og visualisering"
+    about = "stat-analysis — Statistical Assumption Diagnostics, Model Quality & Interactive Visualization"
 )]
 struct Cli {
-    /// Kjør automatisk analyse direkte på en CSV-fil uten GUI (CLI-modus)
+    /// Run automatic analysis directly on a CSV file without GUI (CLI mode)
     #[arg(long)]
     csv: Option<PathBuf>,
 
-    /// Utmappe for rapport og visualiseringer i CLI-modus
+    /// Output folder for reports and visualizations in CLI mode
     #[arg(long, default_value = "stat_rapport")]
     out: PathBuf,
 
-    /// Signifikansnivå (alpha)
+    /// Significance level (alpha)
     #[arg(long, default_value_t = 0.05)]
     alpha: f64,
+
+    /// Language: "no" (Norwegian, default) or "en" (English)
+    #[arg(long, default_value = "no")]
+    lang: String,
 }
 
 fn main() {
     let cli = Cli::parse();
+    set_lang(Lang::from_str_code(&cli.lang));
 
     if let Some(csv_path) = cli.csv {
-        println!("Leser CSV-fil: {}", csv_path.display());
+        println!("{}: {}", tr("Leser CSV-fil", "Reading CSV file"), csv_path.display());
         let bytes = fs::read(&csv_path).unwrap_or_else(|e| {
             eprintln!("Feil ved lesing av fil: {}", e);
             std::process::exit(1);

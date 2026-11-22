@@ -247,9 +247,16 @@ pub fn check_multicollinearity(
     .to_string();
 
     let interpretation = if status == "ok" {
+        if crate::i18n::is_en() {
+            format!("No concerning multicollinearity (max VIF = {:.2} < 5, no |r| > 0.8).", max_vif)
+        } else {
+            format!("Ingen bekymringsfull multikollinearitet (maks VIF = {:.2} < 5, ingen |r| > 0.8).", max_vif)
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Ingen bekymringsfull multikollinearitet (maks VIF = {:.2} < 5, ingen |r| > 0.8).",
-            max_vif
+            "Multicollinearity detected! Max VIF = {:.2}, {} variable pair(s) have |r| > 0.8.",
+            max_vif,
+            high_corr_pairs.len()
         )
     } else {
         format!(
@@ -260,17 +267,28 @@ pub fn check_multicollinearity(
     };
 
     let recommendation = if status == "ok" {
-        "Alle forklaringsvariabler har akseptabel VIF (< 5).".to_string()
+        crate::i18n::tr(
+            "Alle forklaringsvariabler har akseptabel VIF (< 5).",
+            "All predictor variables have acceptable VIF (< 5).",
+        )
+        .to_string()
     } else {
         let worst = vifs
             .iter()
             .max_by(|a, b| a.vif.partial_cmp(&b.vif).unwrap_or(std::cmp::Ordering::Equal))
             .map(|v| v.variable.as_str())
-            .unwrap_or("variabelen med høyest VIF");
-        format!(
-            "Vurder å fjerne eller slå sammen '{}' (høyest VIF), eller bruk Ridge-/Lasso-regresjon (beregnet under).",
-            worst
-        )
+            .unwrap_or("highest-VIF variable");
+        if crate::i18n::is_en() {
+            format!(
+                "Consider removing or combining '{}' (highest VIF), or use Ridge/Lasso regression (computed below).",
+                worst
+            )
+        } else {
+            format!(
+                "Vurder å fjerne eller slå sammen '{}' (høyest VIF), eller bruk Ridge-/Lasso-regresjon (beregnet under).",
+                worst
+            )
+        }
     };
 
     Ok(MulticollinearityReport {
@@ -467,11 +485,15 @@ pub fn check_autocorrelation(
     let ss_diff: f64 = e.windows(2).map(|w| (w[1] - w[0]).powi(2)).sum();
     let dw = if ss_e > 1e-15 { ss_diff / ss_e } else { 2.0 };
     let dw_assessment = if dw < 1.5 {
-        "Positiv autokorrelasjon (DW < 1.5)".to_string()
+        crate::i18n::tr("Positiv autokorrelasjon (DW < 1.5)", "Positive autocorrelation (DW < 1.5)").to_string()
     } else if dw > 2.5 {
-        "Negativ autokorrelasjon (DW > 2.5)".to_string()
+        crate::i18n::tr("Negativ autokorrelasjon (DW > 2.5)", "Negative autocorrelation (DW > 2.5)").to_string()
     } else {
-        "Nær 2.0 — lite tegn til 1. ordens autokorrelasjon".to_string()
+        crate::i18n::tr(
+            "Nær 2.0 — lite tegn til 1. ordens autokorrelasjon",
+            "Near 2.0 — little evidence of 1st-order autocorrelation",
+        )
+        .to_string()
     };
 
     // Breusch-Godfrey LM test (auxiliary regression of e_t on X_t and e_{t-1}...e_{t-p}, zero-padded)
@@ -535,9 +557,21 @@ pub fn check_autocorrelation(
     .to_string();
 
     let interpretation = if !violated {
+        if crate::i18n::is_en() {
+            format!(
+                "No significant autocorrelation (DW = {:.3}, Breusch-Godfrey LM({}) = {:.3}, p = {:.4}).",
+                dw, p_lags, bg_lm_stat, bg_p_value
+            )
+        } else {
+            format!(
+                "Ingen signifikant autokorrelasjon (DW = {:.3}, Breusch-Godfrey LM({}) = {:.3}, p = {:.4}).",
+                dw, p_lags, bg_lm_stat, bg_p_value
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Ingen signifikant autokorrelasjon (DW = {:.3}, Breusch-Godfrey LM({}) = {:.3}, p = {:.4}).",
-            dw, p_lags, bg_lm_stat, bg_p_value
+            "Autocorrelation detected! DW = {:.3}, Breusch-Godfrey LM({}) = {:.3} (p = {:.4}), AR(1) φ = {:.3}.",
+            dw, p_lags, bg_lm_stat, bg_p_value, ar1_phi
         )
     } else {
         format!(
@@ -547,7 +581,16 @@ pub fn check_autocorrelation(
     };
 
     let recommendation = if !violated {
-        "Uavhengige feilledd ser ut til å være oppfylt.".to_string()
+        crate::i18n::tr(
+            "Uavhengige feilledd ser ut til å være oppfylt.",
+            "Independent error terms appear satisfied.",
+        )
+        .to_string()
+    } else if crate::i18n::is_en() {
+        format!(
+            "Use Newey-West HAC robust standard errors (computed below with lag L={}) or a time-series model such as ARIMA/AR(1) (reduces residual RMSE from {:.4} to {:.4}).",
+            nw_lag, ols.rmse, ar1_rmse
+        )
     } else {
         format!(
             "Bruk Newey-West HAC robuste standardfeil (beregnet under med lag L={}) eller tidsseriemodell som ARIMA/AR(1) (reduserer residual-RMSE fra {:.4} til {:.4}).",
@@ -747,8 +790,20 @@ pub fn check_heteroscedasticity(
     .to_string();
 
     let interpretation = if !violated {
+        if crate::i18n::is_en() {
+            format!(
+                "Homoscedasticity (constant residual variance) is satisfied (Breusch-Pagan p = {:.4}, White p = {:.4}).",
+                bp_p_value, white_p_value
+            )
+        } else {
+            format!(
+                "Homoskedastisitet (lik residualvarians) er oppfylt (Breusch-Pagan p = {:.4}, White p = {:.4}).",
+                bp_p_value, white_p_value
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Homoskedastisitet (lik residualvarians) er oppfylt (Breusch-Pagan p = {:.4}, White p = {:.4}).",
+            "Heteroscedasticity detected (Breusch-Pagan p = {:.4}, White p = {:.4}).",
             bp_p_value, white_p_value
         )
     } else {
@@ -759,14 +814,29 @@ pub fn check_heteroscedasticity(
     };
 
     let recommendation = if !violated {
-        "Standard OLS-standardfeil er gyldige med hensyn til residualvarians.".to_string()
-    } else if log_y_fallback.applicable && log_y_fallback.improved {
-        format!(
-            "Bruk robuste standardfeil (HC3, beregnet under) eller log-transformasjon av Y (forbedrer BP p-verdi til {:.4}).",
-            log_y_fallback.bp_p_value.unwrap_or(0.0)
+        crate::i18n::tr(
+            "Standard OLS-standardfeil er gyldige med hensyn til residualvarians.",
+            "Standard OLS standard errors are valid with respect to residual variance.",
         )
+        .to_string()
+    } else if log_y_fallback.applicable && log_y_fallback.improved {
+        if crate::i18n::is_en() {
+            format!(
+                "Use HC3 robust standard errors (computed below) or log-transformation of Y (improves BP p-value to {:.4}).",
+                log_y_fallback.bp_p_value.unwrap_or(0.0)
+            )
+        } else {
+            format!(
+                "Bruk robuste standardfeil (HC3, beregnet under) eller log-transformasjon av Y (forbedrer BP p-verdi til {:.4}).",
+                log_y_fallback.bp_p_value.unwrap_or(0.0)
+            )
+        }
     } else {
-        "Bruk HC3 robuste standardfeil (beregnet under) i stedet for vanlige OLS-standardfeil.".to_string()
+        crate::i18n::tr(
+            "Bruk HC3 robuste standardfeil (beregnet under) i stedet for vanlige OLS-standardfeil.",
+            "Use HC3 robust standard errors (computed below) instead of ordinary OLS standard errors.",
+        )
+        .to_string()
     };
 
     Ok(HeteroscedasticityReport {
@@ -881,15 +951,30 @@ pub fn check_outliers(
     }
     .to_string();
 
-    let interpretation = format!(
-        "Cook's D > 1: {} obs., Cook's D > 4/n ({:.4}): {} obs., Mahalanobis-uteliggere (p < 0.001): {} obs.",
-        count_cooks_gt_1, cooks_thresh, count_cooks_gt_4_n, count_mahal
-    );
+    let interpretation = if crate::i18n::is_en() {
+        format!(
+            "Cook's D > 1: {} obs., Cook's D > 4/n ({:.4}): {} obs., Mahalanobis outliers (p < 0.001): {} obs.",
+            count_cooks_gt_1, cooks_thresh, count_cooks_gt_4_n, count_mahal
+        )
+    } else {
+        format!(
+            "Cook's D > 1: {} obs., Cook's D > 4/n ({:.4}): {} obs., Mahalanobis-uteliggere (p < 0.001): {} obs.",
+            count_cooks_gt_1, cooks_thresh, count_cooks_gt_4_n, count_mahal
+        )
+    };
 
     let recommendation = if status == "ok" {
-        "Ingen sterkt innflytelsesrike uteliggere oppdaget.".to_string()
+        crate::i18n::tr(
+            "Ingen sterkt innflytelsesrike uteliggere oppdaget.",
+            "No strongly influential outliers detected.",
+        )
+        .to_string()
     } else {
-        "Sjekk utpekte observasjoner for tastefeil og vurder sensitivitetsanalysen (med og uten innflytelsesrike observasjoner nedenfor).".to_string()
+        crate::i18n::tr(
+            "Sjekk utpekte observasjoner for tastefeil og vurder sensitivitetsanalysen (med og uten innflytelsesrike observasjoner nedenfor).",
+            "Inspect flagged observations for data-entry errors and review the sensitivity analysis (with and without influential observations below).",
+        )
+        .to_string()
     };
 
     Ok(OutliersReport {
@@ -945,7 +1030,7 @@ pub fn full_linear_regression_diagnostics(
     // 4. Reduced model keeping only significant predictors (p < 0.10, if subset differs)
     let mut model_comparison = Vec::new();
     model_comparison.push(ModelComparisonEntry {
-        model_name: "Full modell".to_string(),
+        model_name: crate::i18n::tr("Full modell", "Full model").to_string(),
         predictors: predictor_names.to_vec(),
         k_params: ols.k + 1,
         r_squared: ols.r_squared,
@@ -959,7 +1044,7 @@ pub fn full_linear_regression_diagnostics(
     // Null model (intercept only)
     if let Ok(null_fit) = fit_ols(y, &[], &[]) {
         model_comparison.push(ModelComparisonEntry {
-            model_name: "Nullmodell (kun konstantledd)".to_string(),
+            model_name: crate::i18n::tr("Nullmodell (kun konstantledd)", "Null model (intercept only)").to_string(),
             predictors: vec![],
             k_params: null_fit.k + 1,
             r_squared: null_fit.r_squared,
@@ -990,7 +1075,11 @@ pub fn full_linear_regression_diagnostics(
             .collect();
         if let Ok(red_fit) = fit_ols(y, &sub_x, &sub_names) {
             model_comparison.push(ModelComparisonEntry {
-                model_name: format!("Redusert (uten {})", predictor_names[worst_idx]),
+                model_name: if crate::i18n::is_en() {
+                    format!("Reduced (without {})", predictor_names[worst_idx])
+                } else {
+                    format!("Redusert (uten {})", predictor_names[worst_idx])
+                },
                 predictors: sub_names,
                 k_params: red_fit.k + 1,
                 r_squared: red_fit.r_squared,
@@ -1014,7 +1103,7 @@ pub fn full_linear_regression_diagnostics(
                 .collect();
             if let Ok(sig_fit) = fit_ols(y, &sig_x, &sig_names) {
                 model_comparison.push(ModelComparisonEntry {
-                    model_name: "Kun signifikante (p < 0.05)".to_string(),
+                    model_name: crate::i18n::tr("Kun signifikante (p < 0.05)", "Significant only (p < 0.05)").to_string(),
                     predictors: sig_names,
                     k_params: sig_fit.k + 1,
                     r_squared: sig_fit.r_squared,

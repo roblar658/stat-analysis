@@ -1,4 +1,5 @@
 use crate::auto::AutoAnalysisReport;
+use crate::i18n::{is_en, status_label as i18n_status, tr};
 use crate::stats::clustering::ClusteringReport;
 use crate::stats::factor::FactorSuitabilityReport;
 use crate::stats::logistic::LogisticReport;
@@ -54,13 +55,28 @@ pub fn render_markdown_report_with_appendix(
     manual_entries: &[ManualHistoryEntry],
 ) -> String {
     let mut md = String::new();
-    let _ = writeln!(md, "# Statistisk Diagnostikk- og Modellrapport");
-    let _ = writeln!(md, "- **Fil:** `{}`", rep.filename);
-    let _ = writeln!(md, "- **Generert:** {}", rep.generated_at);
-    let _ = writeln!(md, "- **Dimensjoner:** {} rader × {} kolonner\n", rep.row_count, rep.col_count);
+    let _ = writeln!(md, "# {}", tr("Statistisk Diagnostikk- og Modellrapport", "Statistical Diagnostics & Model Report"));
+    let _ = writeln!(md, "- **{}:** `{}`", tr("Fil", "File"), rep.filename);
+    let _ = writeln!(md, "- **{}:** {}", tr("Generert", "Generated"), rep.generated_at);
+    let _ = writeln!(
+        md,
+        "- **{}:** {} {} × {} {}\n",
+        tr("Dimensjoner", "Dimensions"),
+        rep.row_count,
+        tr("rader", "rows"),
+        rep.col_count,
+        tr("kolonner", "columns")
+    );
 
-    let _ = writeln!(md, "## Oppsummering av alle sjekker\n");
-    let _ = writeln!(md, "| Kategori | Sjekk | Status | Resultat | Anbefalt tiltak |");
+    let _ = writeln!(md, "## {}\n", tr("Oppsummering av alle sjekker", "Summary of All Checks"));
+    let _ = writeln!(
+        md,
+        "| {} | {} | Status | {} | {} |",
+        tr("Kategori", "Category"),
+        tr("Sjekk", "Check"),
+        tr("Resultat", "Result"),
+        tr("Anbefalt tiltak", "Recommended Action")
+    );
     let _ = writeln!(md, "|---|---|---|---|---|");
     for b in &rep.summary_badges {
         let _ = writeln!(
@@ -68,7 +84,7 @@ pub fn render_markdown_report_with_appendix(
             "| {} | {} | **{}** | {} | {} |",
             b.category,
             b.check_name,
-            b.status.to_uppercase(),
+            i18n_status(&b.status),
             b.headline,
             b.action
         );
@@ -556,12 +572,19 @@ impl PdfBuilder {
                 PAGE_W - MARGIN_R
             );
             page_buf.extend_from_slice(footer_line.as_bytes());
-            let left_txt = pdf_encode_winansi("stat-analysis — Statistisk Diagnostikk & Modellkvalitet");
+            let left_txt = pdf_encode_winansi(tr(
+                "stat-analysis — Statistisk Diagnostikk & Modellkvalitet",
+                "stat-analysis — Statistical Diagnostics & Model Quality",
+            ));
             page_buf.extend_from_slice(format!("BT /F1 8.0 Tf 0.40 0.45 0.55 rg {:.2} 22.0 Td ", MARGIN_L).as_bytes());
             page_buf.extend_from_slice(&left_txt);
             page_buf.extend_from_slice(b" Tj ET\n");
 
-            let right_txt = pdf_encode_winansi(&format!("Side {} av {}", i + 1, total_pages));
+            let right_txt = pdf_encode_winansi(&if is_en() {
+                format!("Page {} of {}", i + 1, total_pages)
+            } else {
+                format!("Side {} av {}", i + 1, total_pages)
+            });
             page_buf.extend_from_slice(format!("BT /F1 8.0 Tf 0.40 0.45 0.55 rg {:.2} 22.0 Td ", PAGE_W - MARGIN_R - 48.0).as_bytes());
             page_buf.extend_from_slice(&right_txt);
             page_buf.extend_from_slice(b" Tj ET\n");
@@ -646,7 +669,16 @@ pub fn render_pdf_report_with_appendix(
 
     // Header Banner
     pdf.draw_rect_fill(MARGIN_L, pdf.y - 54.0, CONTENT_W, 56.0, 0.114, 0.306, 0.847);
-    pdf.draw_text(MARGIN_L + 14.0, pdf.y - 22.0, "F2", 18.0, 1.0, 1.0, 1.0, "stat-analysis — Statistisk Diagnostikkrapport");
+    pdf.draw_text(
+        MARGIN_L + 14.0,
+        pdf.y - 22.0,
+        "F2",
+        18.0,
+        1.0,
+        1.0,
+        1.0,
+        tr("stat-analysis — Statistisk Diagnostikkrapport", "stat-analysis — Statistical Diagnostics Report"),
+    );
     pdf.draw_text(
         MARGIN_L + 14.0,
         pdf.y - 40.0,
@@ -655,36 +687,50 @@ pub fn render_pdf_report_with_appendix(
         0.859,
         0.918,
         0.996,
-        &format!(
-            "Fil: {}  •  {} rader × {} kolonner  •  Generert: {}",
-            rep.filename, rep.row_count, rep.col_count, rep.generated_at
-        ),
+        &if is_en() {
+            format!(
+                "File: {}  •  {} rows × {} columns  •  Generated: {}",
+                rep.filename, rep.row_count, rep.col_count, rep.generated_at
+            )
+        } else {
+            format!(
+                "Fil: {}  •  {} rader × {} kolonner  •  Generert: {}",
+                rep.filename, rep.row_count, rep.col_count, rep.generated_at
+            )
+        },
     );
     pdf.y -= 70.0;
 
     // Summary Table
-    pdf.section_heading("Oppsummering av alle sjekker");
+    pdf.section_heading(tr("Oppsummering av alle sjekker", "Summary of All Checks"));
     let sum_rows: Vec<Vec<String>> = rep
         .summary_badges
         .iter()
         .map(|b| {
             vec![
                 b.check_name.clone(),
-                b.status.to_uppercase(),
+                i18n_status(&b.status).to_string(),
                 b.headline.clone(),
                 b.action.clone(),
             ]
         })
         .collect();
     pdf.table(
-        &["Sjekk / Test", "Status", "Resultat", "Anbefalt tiltak"],
+        if is_en() {
+            &["Check / Test", "Status", "Result", "Recommended Action"]
+        } else {
+            &["Sjekk / Test", "Status", "Resultat", "Anbefalt tiltak"]
+        },
         &[132.0, 56.0, 142.0, CONTENT_W - 330.0],
         &sum_rows,
     );
 
     // Automatically Selected Main Statistical Analyses (e.g. Student t-test / Welch / Mann-Whitney / ANOVA)
     if !rep.recommended_analyses.is_empty() {
-        pdf.section_heading("Utført hovedanalyse (valgt automatisk etter forutsetningssjekk)");
+        pdf.section_heading(tr(
+            "Utført hovedanalyse (valgt automatisk etter forutsetningssjekk)",
+            "Executed Main Analyses (Automatically Selected After Assumption Checks)",
+        ));
         let ra_rows: Vec<Vec<String>> = rep
             .recommended_analyses
             .iter()
@@ -693,12 +739,16 @@ pub fn render_pdf_report_with_appendix(
                     format!("{} ({})", ra.domain, ra.outcome),
                     ra.chosen_test.clone(),
                     ra.why_chosen.clone(),
-                    format!("{} | Beregning: {}", ra.result_summary, ra.formula_and_calc),
+                    format!("{} | {}: {}", ra.result_summary, tr("Beregning", "Calculation"), ra.formula_and_calc),
                 ]
             })
             .collect();
         pdf.table(
-            &["Analyse / Utfall", "Valgt test", "Begrunnelse (forutsetninger)", "Resultat og utregning"],
+            if is_en() {
+                &["Analysis / Outcome", "Selected Test", "Rationale (Assumptions)", "Result & Calculation"]
+            } else {
+                &["Analyse / Utfall", "Valgt test", "Begrunnelse (forutsetninger)", "Resultat og utregning"]
+            },
             &[105.0, 96.0, 145.0, CONTENT_W - 346.0],
             &ra_rows,
         );
@@ -706,7 +756,10 @@ pub fn render_pdf_report_with_appendix(
 
     // 1. Normality
     if !rep.normality_checks.is_empty() {
-        pdf.section_heading("1. Normalfordeling (Shapiro-Wilk / Kolmogorov-Smirnov)");
+        pdf.section_heading(tr(
+            "1. Normalfordeling (Shapiro-Wilk / Kolmogorov-Smirnov)",
+            "1. Normality (Shapiro-Wilk / Kolmogorov-Smirnov)",
+        ));
         let rows: Vec<Vec<String>> = rep
             .normality_checks
             .iter()
@@ -740,9 +793,14 @@ pub fn render_pdf_report_with_appendix(
 
     // 2. Variance Homogeneity
     if let Some(ref vh) = rep.variance_homogeneity {
-        pdf.section_heading(&format!("2. Varianshomogenitet ({} per {})", vh.value_col, vh.group_col));
-        pdf.paragraph(&vh.interpretation, Some("Resultat"));
-        pdf.paragraph(&vh.recommendation, Some("Anbefalt tiltak"));
+        pdf.section_heading(&format!(
+            "2. {} ({} / {})",
+            tr("Varianshomogenitet", "Variance Homogeneity"),
+            vh.value_col,
+            vh.group_col
+        ));
+        pdf.paragraph(&vh.interpretation, Some(tr("Resultat", "Result")));
+        pdf.paragraph(&vh.recommendation, Some(tr("Anbefalt tiltak", "Recommended Action")));
         let mut rows = vec![
             vec!["Levene (median / Brown-Forsythe)".into(), format!("F = {:.3}", vh.levene_median.f_stat), format!("{}, {}", vh.levene_median.df1, vh.levene_median.df2), format!("{:.4}", vh.levene_median.p_value)],
             vec!["Levene (gjennomsnitt)".into(), format!("F = {:.3}", vh.levene_mean.f_stat), format!("{}, {}", vh.levene_mean.df1, vh.levene_mean.df2), format!("{:.4}", vh.levene_mean.p_value)],
@@ -797,9 +855,13 @@ pub fn render_pdf_report_with_appendix(
 
     // 3. Sphericity
     if let Some(ref sp) = rep.sphericity {
-        pdf.section_heading(&format!("3. Sfærisitet — Repeated Measures ANOVA ({})", sp.columns.join(", ")));
-        pdf.paragraph(&sp.interpretation, Some("Resultat"));
-        pdf.paragraph(&sp.recommendation, Some("Anbefalt tiltak"));
+        pdf.section_heading(&format!(
+            "3. {} — Repeated Measures ANOVA ({})",
+            tr("Sfærisitet", "Sphericity"),
+            sp.columns.join(", ")
+        ));
+        pdf.paragraph(&sp.interpretation, Some(tr("Resultat", "Result")));
+        pdf.paragraph(&sp.recommendation, Some(tr("Anbefalt tiltak", "Recommended Action")));
         let rows = vec![
             vec!["Mauchlys test".into(), format!("W = {:.4}", sp.mauchly_w), format!("p = {:.4}", sp.mauchly_p_value)],
             vec!["RM-ANOVA (ukorrigert)".into(), format!("F = {:.3}", sp.rm_anova_f), format!("p = {:.4}", sp.p_uncorrected)],
@@ -811,7 +873,11 @@ pub fn render_pdf_report_with_appendix(
 
     // 4. Linear Regression + Diagnostics + Vector Residual & ACF Charts
     if let Some(ref reg) = rep.linear_regression {
-        pdf.section_heading(&format!("4. Lineær regresjon, forutsetninger og modellkvalitet (Y = {})", reg.target));
+        pdf.section_heading(&format!(
+            "4. {} (Y = {})",
+            tr("Lineær regresjon, forutsetninger og modellkvalitet", "Linear Regression, Assumptions & Model Quality"),
+            reg.target
+        ));
         pdf.paragraph(
             &format!(
                 "R² = {:.4}, Justert R² = {:.4}, RMSE = {:.4}, MAE = {:.4}, F = {:.2} (p = {:.4}), AIC = {:.2}, BIC = {:.2}.",
@@ -920,9 +986,9 @@ pub fn render_pdf_report_with_appendix(
     }
 
     // 5. Missing Data
-    pdf.section_heading("5. Manglende data og Littles MCAR-test");
-    pdf.paragraph(&rep.missing_data.interpretation, Some("Resultat"));
-    pdf.paragraph(&rep.missing_data.recommendation, Some("Anbefalt tiltak"));
+    pdf.section_heading(tr("5. Manglende data og Littles MCAR-test", "5. Missing Data & Little's MCAR Test"));
+    pdf.paragraph(&rep.missing_data.interpretation, Some(tr("Resultat", "Result")));
+    pdf.paragraph(&rep.missing_data.recommendation, Some(tr("Anbefalt tiltak", "Recommended Action")));
     if !rep.missing_data.mice_summary.is_empty() {
         let rows: Vec<Vec<String>> = rep
             .missing_data
@@ -947,16 +1013,23 @@ pub fn render_pdf_report_with_appendix(
 
     // 6. Factor Suitability
     if let Some(ref fac) = rep.factor_suitability {
-        pdf.section_heading("6. Egnethet for faktoranalyse / PCA (KMO & Bartlett)");
-        pdf.paragraph(&fac.interpretation, Some("Resultat"));
-        pdf.paragraph(&fac.recommendation, Some("Anbefalt tiltak"));
+        pdf.section_heading(tr(
+            "6. Egnethet for faktoranalyse / PCA (KMO & Bartlett)",
+            "6. Factor Analysis / PCA Suitability (KMO & Bartlett)",
+        ));
+        pdf.paragraph(&fac.interpretation, Some(tr("Resultat", "Result")));
+        pdf.paragraph(&fac.recommendation, Some(tr("Anbefalt tiltak", "Recommended Action")));
     }
 
     // 7. Logistic Regression + Vector ROC Curve
     if let Some(ref lr) = rep.logistic_regression {
-        pdf.section_heading(&format!("7. Logistisk regresjon — Hosmer-Lemeshow & ROC/AUC ({})", lr.target));
-        pdf.paragraph(&lr.interpretation, Some("Resultat"));
-        pdf.paragraph(&lr.recommendation, Some("Anbefalt tiltak"));
+        pdf.section_heading(&format!(
+            "7. {} ({})",
+            tr("Logistisk regresjon — Hosmer-Lemeshow & ROC/AUC", "Logistic Regression — Hosmer-Lemeshow & ROC/AUC"),
+            lr.target
+        ));
+        pdf.paragraph(&lr.interpretation, Some(tr("Resultat", "Result")));
+        pdf.paragraph(&lr.recommendation, Some(tr("Anbefalt tiltak", "Recommended Action")));
         pdf.paragraph(
             &format!(
                 "AIC = {:.2}, BIC = {:.2}, Nøyaktighet = {:.1}%, Sensitivitet = {:.1}%, Spesifisitet = {:.1}%, F1 = {:.3}.",
@@ -1007,9 +1080,14 @@ pub fn render_pdf_report_with_appendix(
 
     // 8. Cox Survival
     if let Some(ref cox) = rep.cox_survival {
-        pdf.section_heading(&format!("8. Overlevelsesanalyse — Cox PH & Schoenfeld ({} / {})", cox.time_col, cox.event_col));
-        pdf.paragraph(&cox.interpretation, Some("Resultat"));
-        pdf.paragraph(&cox.recommendation, Some("Anbefalt tiltak"));
+        pdf.section_heading(&format!(
+            "8. {} ({} / {})",
+            tr("Overlevelsesanalyse — Cox PH & Schoenfeld", "Survival Analysis — Cox PH & Schoenfeld"),
+            cox.time_col,
+            cox.event_col
+        ));
+        pdf.paragraph(&cox.interpretation, Some(tr("Resultat", "Result")));
+        pdf.paragraph(&cox.recommendation, Some(tr("Anbefalt tiltak", "Recommended Action")));
         let rows: Vec<Vec<String>> = cox
             .coefficients
             .iter()
@@ -1035,9 +1113,12 @@ pub fn render_pdf_report_with_appendix(
 
     // 9. Clustering
     if let Some(ref cl) = rep.clustering {
-        pdf.section_heading("9. Klyngeanalyse (Silhouette-skår & Elbow-metoden)");
-        pdf.paragraph(&cl.interpretation, Some("Resultat"));
-        pdf.paragraph(&cl.recommendation, Some("Anbefalt tiltak"));
+        pdf.section_heading(tr(
+            "9. Klyngeanalyse (Silhouette-skår & Elbow-metoden)",
+            "9. Cluster Analysis (Silhouette Score & Elbow Method)",
+        ));
+        pdf.paragraph(&cl.interpretation, Some(tr("Resultat", "Result")));
+        pdf.paragraph(&cl.recommendation, Some(tr("Anbefalt tiltak", "Recommended Action")));
         let rows: Vec<Vec<String>> = cl
             .k_evals
             .iter()
@@ -1065,7 +1146,10 @@ pub fn render_pdf_report_with_appendix(
         1.0,
         1.0,
         1.0,
-        "APPENDIKS — Matematiske formler og beregninger",
+        tr(
+            "APPENDIKS — Matematiske formler og beregninger",
+            "APPENDIX — Mathematical Formulas & Calculations",
+        ),
     );
     pdf.draw_text(
         MARGIN_L + 14.0,
@@ -1075,7 +1159,10 @@ pub fn render_pdf_report_with_appendix(
         0.859,
         0.918,
         0.996,
-        "Komplett formeloversikt og innsatte tallverdier for alle statistiske metoder i stat-analysis",
+        tr(
+            "Komplett formeloversikt og innsatte tallverdier for alle statistiske metoder i stat-analysis",
+            "Complete formula reference and substituted numeric calculations for all statistical methods in stat-analysis",
+        ),
     );
     pdf.y -= 64.0;
 
@@ -1216,7 +1303,11 @@ pub fn render_pdf_report_with_appendix(
     }
 
     pdf.table(
-        &["Metode / Test", "Formel / Innsatte tall", "Forklaring og beregningsgrunnlag"],
+        if is_en() {
+            &["Method / Test", "Formula / Substituted Values", "Explanation & Basis"]
+        } else {
+            &["Metode / Test", "Formel / Innsatte tall", "Forklaring og beregningsgrunnlag"]
+        },
         &[120.0, 215.0, CONTENT_W - 335.0],
         &formula_rows,
     );
@@ -1235,7 +1326,7 @@ pub fn render_pdf_report_with_appendix(
             1.0,
             1.0,
             1.0,
-            "APPENDIKS — Manuelle utregninger",
+            tr("APPENDIKS — Manuelle utregninger", "APPENDIX — Manual Calculations"),
         );
         pdf.draw_text(
             MARGIN_L + 14.0,
@@ -1245,22 +1336,32 @@ pub fn render_pdf_report_with_appendix(
             0.800,
             0.855,
             0.930,
-            &format!(
-                "Alle egendefinerte tester kjørt i Manuell testbenk ({} stk.) for {}",
-                manual_entries.len(),
-                rep.filename
-            ),
+            &if is_en() {
+                format!(
+                    "All custom tests run in Manual Workbench ({} entries) for {}",
+                    manual_entries.len(),
+                    rep.filename
+                )
+            } else {
+                format!(
+                    "Alle egendefinerte tester kjørt i Manuell testbenk ({} stk.) for {}",
+                    manual_entries.len(),
+                    rep.filename
+                )
+            },
         );
         pdf.y -= 64.0;
 
         for (idx, entry) in manual_entries.iter().enumerate() {
-            pdf.section_heading(&format!(
-                "Appendiks A.{}: {} (kl. {})",
-                idx + 1,
-                entry.title,
-                entry.timestamp
-            ));
-            pdf.paragraph(&entry.parameters, Some("Valgte kolonner og parametere"));
+            pdf.section_heading(&if is_en() {
+                format!("Appendix A.{}: {} ({})", idx + 1, entry.title, entry.timestamp)
+            } else {
+                format!("Appendiks A.{}: {} (kl. {})", idx + 1, entry.title, entry.timestamp)
+            });
+            pdf.paragraph(
+                &entry.parameters,
+                Some(tr("Valgte kolonner og parametere", "Selected Columns & Parameters")),
+            );
 
             match &entry.result {
                 ManualCalcResult::Normality { check, boot, .. } => {

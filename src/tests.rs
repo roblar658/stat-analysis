@@ -307,3 +307,46 @@ fn test_all_individual_statistical_methods_and_fallbacks() {
     assert!(cl.best_silhouette > 0.45, "Expected strong 3-cluster silhouette > 0.45, got {}", cl.best_silhouette);
     assert_eq!(cl.best_k_silhouette, 3, "Expected optimal k=3 for 3 generated clusters");
 }
+
+#[test]
+fn test_language_switching_norwegian_and_english() {
+    use crate::i18n::{current_lang, set_lang, Lang};
+
+    let csv = "group,score\n\
+A,10.1\nA,10.5\nA,9.8\nA,10.3\nA,9.9\nA,10.2\nA,10.0\nA,9.7\nA,10.4\nA,10.1\n\
+B,12.2\nB,12.6\nB,11.9\nB,12.4\nB,12.0\nB,12.3\nB,12.1\nB,11.8\nB,12.5\nB,12.2\n";
+    let ds = Dataset::from_csv_str("bilingual_case.csv", csv).unwrap();
+
+    // Switch to English
+    set_lang(Lang::En);
+    assert_eq!(current_lang(), Lang::En);
+    let rep_en = run_automatic_analysis(&ds, 0.05);
+    let chosen_en = rep_en
+        .recommended_analyses
+        .iter()
+        .find(|r| r.outcome == "score")
+        .expect("Expected English recommended analysis");
+    assert_eq!(chosen_en.chosen_test, "Student's independent t-test");
+    let pdf_en = render_pdf_report(&rep_en);
+    let pdf_en_str = String::from_utf8_lossy(&pdf_en);
+    assert!(pdf_en_str.contains("Statistical Diagnostics Report"));
+    assert!(pdf_en_str.contains("APPENDIX"));
+    assert!(pdf_en_str.contains("Page 1 of"));
+    let md_en = render_markdown_report(&rep_en);
+    assert!(md_en.contains("Summary of All Checks"));
+
+    // Switch back to Norwegian
+    set_lang(Lang::No);
+    assert_eq!(current_lang(), Lang::No);
+    let rep_no = run_automatic_analysis(&ds, 0.05);
+    let chosen_no = rep_no
+        .recommended_analyses
+        .iter()
+        .find(|r| r.outcome == "score")
+        .expect("Expected Norwegian recommended analysis");
+    assert_eq!(chosen_no.chosen_test, "Student uavhengig t-test");
+    let pdf_no = render_pdf_report(&rep_no);
+    let pdf_no_str = String::from_utf8_lossy(&pdf_no);
+    assert!(pdf_no_str.contains("Statistisk Diagnostikkrapport"));
+    assert!(pdf_no_str.contains("APPENDIKS"));
+}

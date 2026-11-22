@@ -1,5 +1,6 @@
 use crate::auto::AutoAnalysisReport;
 use crate::data::Dataset;
+use crate::i18n::{is_en, tr};
 use crate::plots::{
     svg_acf_plot, svg_boxplot, svg_calibration_plot, svg_clusters_2d, svg_corr_heatmap,
     svg_elbow_silhouette, svg_histogram, svg_leverage_cooks, svg_missingness, svg_qq_plot,
@@ -55,15 +56,15 @@ impl ManualTestKind {
     }
     pub fn label(&self) -> &'static str {
         match self {
-            Self::Normality => "1. Normalfordeling (SW / KS / Bootstrap)",
-            Self::GroupVariance => "2. Varians & Gruppe (Levene / Bartlett / Welch / MW / KW)",
-            Self::Sphericity => "3. Sfærisitet (Mauchly / GG / HF / RM-ANOVA)",
-            Self::Regression => "4. Lineær regresjon + alle forutsetninger + AIC/BIC",
-            Self::Missing => "5. Manglende data (Littles MCAR / MICE / FIML)",
-            Self::Factor => "6. Faktoranalyse-egnethet (KMO / Bartlett / PCA)",
-            Self::Logistic => "7. Logistisk regresjon (Hosmer-Lemeshow / ROC / AUC)",
-            Self::Survival => "8. Overlevelsesanalyse (Cox PH / Schoenfeld)",
-            Self::Clustering => "9. Klyngeanalyse (Silhouette / Elbow / 2D PCA)",
+            Self::Normality => tr("1. Normalfordeling (SW / KS / Bootstrap)", "1. Normality (SW / KS / Bootstrap)"),
+            Self::GroupVariance => tr("2. Varians & Gruppe (Levene / Bartlett / Student / Welch / MW / KW)", "2. Variance & Groups (Levene / Bartlett / Student / Welch / MW / KW)"),
+            Self::Sphericity => tr("3. Sfærisitet (Mauchly / GG / HF / RM-ANOVA)", "3. Sphericity (Mauchly / GG / HF / RM-ANOVA)"),
+            Self::Regression => tr("4. Lineær regresjon + alle forutsetninger + AIC/BIC", "4. Linear Regression + All Assumptions + AIC/BIC"),
+            Self::Missing => tr("5. Manglende data (Littles MCAR / MICE / FIML)", "5. Missing Data (Little's MCAR / MICE / FIML)"),
+            Self::Factor => tr("6. Faktoranalyse-egnethet (KMO / Bartlett / PCA)", "6. Factor Suitability (KMO / Bartlett / PCA)"),
+            Self::Logistic => tr("7. Logistisk regresjon (Hosmer-Lemeshow / ROC / AUC)", "7. Logistic Regression (Hosmer-Lemeshow / ROC / AUC)"),
+            Self::Survival => tr("8. Overlevelsesanalyse (Cox PH / Schoenfeld)", "8. Survival Analysis (Cox PH / Schoenfeld)"),
+            Self::Clustering => tr("9. Klyngeanalyse (Silhouette / Elbow / DBSCAN / 2D PCA)", "9. Cluster Analysis (Silhouette / Elbow / DBSCAN / 2D PCA)"),
         }
     }
 }
@@ -136,8 +137,23 @@ impl ManualWorkbench {
     }
 
     pub fn render(&mut self, ui: &mut Ui, ds: &Dataset, rep: &AutoAnalysisReport, alpha: f64) {
-        ui.label(RichText::new("Manuell testbenk — kjør alle tester med egne valg").size(22.0).strong().color(TEXT_PRIMARY));
-        ui.label(RichText::new("Velg hvilken som helst statistisk test, angi eksakte kolonner og parametere, og eksporter interaktive grafer som SVG.").size(13.0).color(TEXT_SECONDARY));
+        ui.label(
+            RichText::new(tr(
+                "Manuell testbenk — kjør alle tester med egne valg",
+                "Manual Workbench — Run Any Test with Custom Settings",
+            ))
+            .size(22.0)
+            .strong()
+            .color(TEXT_PRIMARY),
+        );
+        ui.label(
+            RichText::new(tr(
+                "Velg hvilken som helst statistisk test, angi eksakte kolonner og parametere, og eksporter interaktive grafer som SVG.",
+                "Pick any statistical test, choose exact columns and parameters, and export interactive charts as SVG.",
+            ))
+            .size(13.0)
+            .color(TEXT_SECONDARY),
+        );
         ui.add_space(10.0);
 
         let all_cols = ds.headers.clone();
@@ -148,7 +164,7 @@ impl ManualWorkbench {
         show_card(ui, |ui| {
             let combo_w = (ui.available_width() - 90.0).clamp(200.0, 440.0);
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("Velg test:").strong().color(TEXT_PRIMARY));
+                ui.label(RichText::new(tr("Velg test:", "Select test:")).strong().color(TEXT_PRIMARY));
                 ComboBox::from_id_salt("manual_test_pick")
                     .width(combo_w)
                     .selected_text(self.active_test.label())
@@ -174,30 +190,30 @@ impl ManualWorkbench {
             match self.active_test {
                 ManualTestKind::Normality => {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Numerisk variabel:").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Numerisk variabel:", "Numeric variable:")).color(TEXT_PRIMARY));
                         combo_col(ui, "man_norm_col", &mut self.single_col, &num_cols);
                         ui.add_space(12.0);
-                        ui.label(RichText::new("Bootstrap resamples:").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Bootstrap resamples:", "Bootstrap resamples:")).color(TEXT_PRIMARY));
                         ui.add(egui::DragValue::new(&mut self.bootstrap_n).range(200..=10000).speed(100));
                     });
                 }
                 ManualTestKind::GroupVariance => {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Numerisk utfall:").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Numerisk utfall:", "Numeric outcome:")).color(TEXT_PRIMARY));
                         combo_col(ui, "man_gv_val", &mut self.single_col, &num_cols);
                         ui.add_space(12.0);
-                        ui.label(RichText::new("Gruppekolonne:").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Gruppekolonne:", "Group column:")).color(TEXT_PRIMARY));
                         let g_opts = if grp_cols.is_empty() { &all_cols } else { &grp_cols };
                         combo_col(ui, "man_gv_grp", &mut self.group_col, g_opts);
                     });
                 }
                 ManualTestKind::Sphericity => {
-                    ui.label(RichText::new("Velg minst 3 repeterte målingskolonner:").strong().color(TEXT_PRIMARY));
+                    ui.label(RichText::new(tr("Velg minst 3 repeterte målingskolonner:", "Select at least 3 repeated-measure columns:")).strong().color(TEXT_PRIMARY));
                     multi_col_picker(ui, &num_cols, &mut self.multi_cols);
                 }
                 ManualTestKind::Regression => {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Avhengig variabel (Y):").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Avhengig variabel (Y):", "Dependent variable (Y):")).color(TEXT_PRIMARY));
                         combo_col(ui, "man_reg_y", &mut self.target_col, &num_cols);
                         ui.add_space(12.0);
                         ui.label(RichText::new("BG lags:").color(TEXT_PRIMARY));
@@ -207,66 +223,69 @@ impl ManualWorkbench {
                         ui.add(egui::DragValue::new(&mut self.ridge_lambda).range(0.01..=100.0).speed(0.2));
                     });
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Forklaringsvariabler (X):").strong().color(TEXT_PRIMARY));
+                    ui.label(RichText::new(tr("Forklaringsvariabler (X):", "Predictor variables (X):")).strong().color(TEXT_PRIMARY));
                     multi_col_picker(ui, &num_cols, &mut self.multi_cols);
                 }
                 ManualTestKind::Missing => {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Antall MICE-imputeringer (m):").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Antall MICE-imputeringer (m):", "MICE imputations (m):")).color(TEXT_PRIMARY));
                         ui.add(egui::DragValue::new(&mut self.mice_m).range(3..=15));
                     });
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Numeriske kolonner for Littles MCAR & MICE:").strong().color(TEXT_PRIMARY));
+                    ui.label(RichText::new(tr("Numeriske kolonner for Littles MCAR & MICE:", "Numeric columns for Little's MCAR & MICE:")).strong().color(TEXT_PRIMARY));
                     multi_col_picker(ui, &num_cols, &mut self.multi_cols);
                 }
                 ManualTestKind::Factor => {
-                    ui.label(RichText::new("Velg minst 3 numeriske variabler for KMO & Bartlett:").strong().color(TEXT_PRIMARY));
+                    ui.label(RichText::new(tr("Velg minst 3 numeriske variabler for KMO & Bartlett:", "Select at least 3 numeric variables for KMO & Bartlett:")).strong().color(TEXT_PRIMARY));
                     multi_col_picker(ui, &num_cols, &mut self.multi_cols);
                 }
                 ManualTestKind::Logistic => {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Binær målvariabel (Y):").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Binær målvariabel (Y):", "Binary target variable (Y):")).color(TEXT_PRIMARY));
                         let opts = if bin_cols.is_empty() { &all_cols } else { &bin_cols };
                         combo_col(ui, "man_log_y", &mut self.target_col, opts);
                         ui.add_space(12.0);
-                        ui.label(RichText::new("Hosmer-Lemeshow grupper (g):").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Hosmer-Lemeshow grupper (g):", "Hosmer-Lemeshow groups (g):")).color(TEXT_PRIMARY));
                         ui.add(egui::DragValue::new(&mut self.hl_groups).range(3..=10));
                     });
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Forklaringsvariabler (X):").strong().color(TEXT_PRIMARY));
+                    ui.label(RichText::new(tr("Forklaringsvariabler (X):", "Predictor variables (X):")).strong().color(TEXT_PRIMARY));
                     multi_col_picker(ui, &num_cols, &mut self.multi_cols);
                 }
                 ManualTestKind::Survival => {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Tidskolonne (> 0):").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Tidskolonne (> 0):", "Time column (> 0):")).color(TEXT_PRIMARY));
                         combo_col(ui, "man_surv_t", &mut self.time_col, &num_cols);
                         ui.add_space(12.0);
-                        ui.label(RichText::new("Hendelseskolonne (binær):").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Hendelseskolonne (binær):", "Event column (binary):")).color(TEXT_PRIMARY));
                         let opts = if bin_cols.is_empty() { &all_cols } else { &bin_cols };
                         combo_col(ui, "man_surv_e", &mut self.event_col, opts);
                     });
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Kovariater (X):").strong().color(TEXT_PRIMARY));
+                    ui.label(RichText::new(tr("Kovariater (X):", "Covariates (X):")).strong().color(TEXT_PRIMARY));
                     multi_col_picker(ui, &num_cols, &mut self.multi_cols);
                 }
                 ManualTestKind::Clustering => {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Maks antall klynger (k_max):").color(TEXT_PRIMARY));
+                        ui.label(RichText::new(tr("Maks antall klynger (k_max):", "Max clusters (k_max):")).color(TEXT_PRIMARY));
                         ui.add(egui::DragValue::new(&mut self.k_max).range(3..=10));
                     });
                     ui.add_space(6.0);
-                    ui.label(RichText::new("Numeriske variabler (minst 2):").strong().color(TEXT_PRIMARY));
+                    ui.label(RichText::new(tr("Numeriske variabler (minst 2):", "Numeric variables (at least 2):")).strong().color(TEXT_PRIMARY));
                     multi_col_picker(ui, &num_cols, &mut self.multi_cols);
                 }
             }
 
             ui.add_space(12.0);
             ui.horizontal_wrapped(|ui| {
-                if primary_button(ui, "  Kjør valgt test  ").clicked() {
+                if primary_button(ui, tr("  Kjør valgt test  ", "  Run Selected Test  ")).clicked() {
                     self.execute(ds, alpha);
                 }
-                if secondary_button(ui, "  Kjør alle relevante tester → Appendiks  ")
-                    .on_hover_text("Utfører automatisk alle relevante tester for dette datasettet og legger dem i PDF-appendikset")
+                if secondary_button(ui, tr("  Kjør alle relevante tester → Appendiks  ", "  Run All Relevant Tests → Appendix  "))
+                    .on_hover_text(tr(
+                        "Utfører automatisk alle relevante tester for dette datasettet og legger dem i PDF-appendikset",
+                        "Automatically runs every applicable test for this dataset and logs them into the PDF Appendix",
+                    ))
                     .clicked()
                 {
                     self.execute_all_relevant(ds, rep, alpha);
@@ -274,10 +293,11 @@ impl ManualWorkbench {
                 if !self.history.is_empty() {
                     ui.add_space(8.0);
                     ui.label(
-                        RichText::new(format!(
-                            "{} manuelle utregninger inkluderes i Appendiks ved PDF-eksport",
-                            self.history.len()
-                        ))
+                        RichText::new(if is_en() {
+                            format!("{} manual calculations will be included in the PDF Appendix", self.history.len())
+                        } else {
+                            format!("{} manuelle utregninger inkluderes i Appendiks ved PDF-eksport", self.history.len())
+                        })
                         .color(Color32::from_rgb(20, 83, 45))
                         .strong()
                         .size(12.5),
@@ -287,7 +307,7 @@ impl ManualWorkbench {
 
             if let Some(ref err) = self.last_error {
                 ui.add_space(8.0);
-                ui.label(RichText::new(format!("Feil: {}", err)).color(Color32::from_rgb(185, 28, 28)).strong());
+                ui.label(RichText::new(format!("{}: {}", tr("Feil", "Error"), err)).color(Color32::from_rgb(185, 28, 28)).strong());
             }
         });
 
@@ -299,27 +319,38 @@ impl ManualWorkbench {
             show_card(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(bold_text(
-                        &format!("Appendiks-logg for PDF-rapport ({} manuelle utregninger)", self.history.len()),
+                        &if is_en() {
+                            format!("PDF Appendix Log ({} manual calculations)", self.history.len())
+                        } else {
+                            format!("Appendiks-logg for PDF-rapport ({} manuelle utregninger)", self.history.len())
+                        },
                         14.0,
                         TEXT_PRIMARY,
                     ));
-                    if secondary_button(ui, "Tøm appendiks-logg").clicked() {
+                    if secondary_button(ui, tr("Tøm appendiks-logg", "Clear Appendix Log")).clicked() {
                         clear_all = true;
                     }
                 });
                 ui.add_space(6.0);
                 show_table(ui, "manual_hist_tbl", |ui| {
-                    table_header_row(ui, &["Ref.", "Tid", "Manuell utregning", "Parametere", "Handlinger"]);
+                    table_header_row(
+                        ui,
+                        if is_en() {
+                            &["Ref.", "Time", "Manual Calculation", "Parameters", "Actions"]
+                        } else {
+                            &["Ref.", "Tid", "Manuell utregning", "Parametere", "Handlinger"]
+                        },
+                    );
                     for (i, h) in self.history.iter().enumerate() {
                         ui.label(bold_text(&format!("A.{}", i + 1), 12.5, TEXT_PRIMARY));
                         ui.label(RichText::new(&h.timestamp).color(TEXT_SECONDARY));
                         ui.label(bold_text(&h.title, 12.5, TEXT_PRIMARY));
                         ui.label(RichText::new(&h.parameters).color(TEXT_SECONDARY));
                         ui.horizontal(|ui| {
-                            if ui.small_button("Vis").clicked() {
+                            if ui.small_button(tr("Vis", "View")).clicked() {
                                 view_idx = Some(i);
                             }
-                            if ui.small_button("Fjern").clicked() {
+                            if ui.small_button(tr("Fjern", "Remove")).clicked() {
                                 remove_idx = Some(i);
                             }
                         });
@@ -718,7 +749,7 @@ impl ManualWorkbench {
 
 fn combo_col(ui: &mut Ui, id: &str, selected: &mut String, options: &[String]) {
     ComboBox::from_id_salt(id)
-        .selected_text(if selected.is_empty() { "Velg..." } else { selected.as_str() })
+        .selected_text(if selected.is_empty() { tr("Velg...", "Select...") } else { selected.as_str() })
         .show_ui(ui, |ui| {
             for opt in options {
                 ui.selectable_value(selected, opt.clone(), opt);

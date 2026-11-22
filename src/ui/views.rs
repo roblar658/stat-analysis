@@ -1,5 +1,6 @@
 use crate::auto::AutoAnalysisReport;
 use crate::data::Dataset;
+use crate::i18n::{is_en, tr};
 use crate::plots::{
     svg_acf_plot, svg_boxplot, svg_calibration_plot, svg_clusters_2d, svg_corr_heatmap,
     svg_elbow_silhouette, svg_histogram, svg_leverage_cooks, svg_missingness, svg_qq_plot,
@@ -45,11 +46,18 @@ pub fn render_dashboard(
 ) {
     page_header(
         ui,
-        "Automatisk Diagnostikk-oversikt",
-        &format!(
-            "Fil: {}  •  {} rader × {} kolonner  •  Generert {}",
-            rep.filename, rep.row_count, rep.col_count, rep.generated_at
-        ),
+        tr("Automatisk Diagnostikk-oversikt", "Automatic Diagnostics Overview"),
+        &if is_en() {
+            format!(
+                "File: {}  •  {} rows × {} columns  •  Generated {}",
+                rep.filename, rep.row_count, rep.col_count, rep.generated_at
+            )
+        } else {
+            format!(
+                "Fil: {}  •  {} rader × {} kolonner  •  Generert {}",
+                rep.filename, rep.row_count, rep.col_count, rep.generated_at
+            )
+        },
     );
 
     let ok_n = rep.summary_badges.iter().filter(|b| b.status == "ok").count();
@@ -57,21 +65,42 @@ pub fn render_dashboard(
     let fail_n = rep.summary_badges.iter().filter(|b| b.status == "fail").count();
 
     ui.horizontal_wrapped(|ui| {
-        kpi_card(ui, "Totalt sjekket", &format!("{}", rep.summary_badges.len()), Some("Forutsetninger & modell"));
-        kpi_card(ui, "Oppfylt (OK)", &format!("{}", ok_n), Some("Ingen brudd"));
-        kpi_card(ui, "Advarsler", &format!("{}", warn_n), Some("Bør vurderes"));
-        kpi_card(ui, "Forutsetning brutt", &format!("{}", fail_n), Some("Bruk anbefalt tiltak"));
-        kpi_card(ui, "Visualiseringer", &format!("{}", rep.charts.len()), Some("Interaktive + SVG"));
+        kpi_card(ui, tr("Totalt sjekket", "Total Checked"), &format!("{}", rep.summary_badges.len()), Some(tr("Forutsetninger & modell", "Assumptions & model")));
+        kpi_card(ui, tr("Oppfylt (OK)", "Satisfied (OK)"), &format!("{}", ok_n), Some(tr("Ingen brudd", "No violations")));
+        kpi_card(ui, tr("Advarsler", "Warnings"), &format!("{}", warn_n), Some(tr("Bør vurderes", "Review advised")));
+        kpi_card(ui, tr("Forutsetning brutt", "Violated"), &format!("{}", fail_n), Some(tr("Bruk anbefalt tiltak", "Use recommended remedy")));
+        kpi_card(ui, tr("Visualiseringer", "Visualizations"), &format!("{}", rep.charts.len()), Some(tr("Interaktive + SVG", "Interactive + SVG")));
     });
 
     ui.add_space(14.0);
     if !rep.recommended_analyses.is_empty() {
         show_card(ui, |ui| {
-            ui.label(bold_text("Automatisk valgte og utførte hovedanalyser (basert på forutsetningssjekk)", 14.5, TEXT_PRIMARY));
-            ui.label(RichText::new("Programmet sjekker først normalitet, varianshomogenitet, sfærisitet og regresjonsforutsetninger — og utfører deretter riktig test (f.eks. Student t-test, Welchs t-test, Mann-Whitney, ANOVA, Welch ANOVA, Kruskal-Wallis eller robust OLS).").size(12.2).color(TEXT_SECONDARY));
+            ui.label(bold_text(
+                tr(
+                    "Automatisk valgte og utførte hovedanalyser (basert på forutsetningssjekk)",
+                    "Automatically Selected & Executed Main Analyses (Based on Assumption Checks)",
+                ),
+                14.5,
+                TEXT_PRIMARY,
+            ));
+            ui.label(
+                RichText::new(tr(
+                    "Programmet sjekker først normalitet, varianshomogenitet, sfærisitet og regresjonsforutsetninger — og utfører deretter riktig test (f.eks. Student t-test, Welchs t-test, Mann-Whitney, ANOVA, Welch ANOVA, Kruskal-Wallis eller robust OLS).",
+                    "The program first checks normality, variance homogeneity, sphericity, and regression assumptions — then runs the statistically valid test (e.g. Student t-test, Welch t-test, Mann-Whitney, ANOVA, Welch ANOVA, Kruskal-Wallis, or robust OLS).",
+                ))
+                .size(12.2)
+                .color(TEXT_SECONDARY),
+            );
             ui.add_space(6.0);
             show_table(ui, "rec_main_tbl", |ui| {
-                table_header_row(ui, &["Analyseområde", "Utfall", "Valgt test", "Resultat", "Signifikant?"]);
+                table_header_row(
+                    ui,
+                    if is_en() {
+                        &["Analysis Domain", "Outcome", "Selected Test", "Result", "Significant?"]
+                    } else {
+                        &["Analyseområde", "Utfall", "Valgt test", "Resultat", "Signifikant?"]
+                    },
+                );
                 for ra in &rep.recommended_analyses {
                     ui.label(bold_text(&ra.domain, 12.5, TEXT_PRIMARY));
                     ui.label(RichText::new(&ra.outcome).color(TEXT_PRIMARY));
@@ -85,7 +114,14 @@ pub fn render_dashboard(
         ui.add_space(14.0);
     }
 
-    ui.label(bold_text("Alle sjekker — klikk «Åpne detaljer» på et kort for tabeller og interaktive plott", 14.5, TEXT_PRIMARY));
+    ui.label(bold_text(
+        tr(
+            "Alle sjekker — klikk «Åpne detaljer» på et kort for tabeller og interaktive plott",
+            "All Checks — Click «Open Details» on any card for tables and interactive plots",
+        ),
+        14.5,
+        TEXT_PRIMARY,
+    ));
     ui.add_space(8.0);
 
     let avail = ui.available_width().max(260.0);
@@ -133,7 +169,7 @@ pub fn render_dashboard(
                                 ui.label(RichText::new(&b.action).color(TEXT_SECONDARY).size(12.0));
                                 ui.add_space(6.0);
                                 if let Some(sec) = badge_to_section(&b.check_name) {
-                                    if secondary_button(ui, "Åpne detaljer →").clicked() {
+                                    if secondary_button(ui, tr("Åpne detaljer →", "Open Details →")).clicked() {
                                         *nav_target = Some(sec);
                                     }
                                 }
@@ -148,7 +184,11 @@ pub fn render_dashboard(
     if !rep.notes.is_empty() {
         ui.add_space(4.0);
         show_card(ui, |ui| {
-            ui.label(bold_text("Merknader fra automatisk kolonne-gjenkjenning", 14.0, TEXT_PRIMARY));
+            ui.label(bold_text(
+                tr("Merknader fra automatisk kolonne-gjenkjenning", "Notes from Automatic Column Detection"),
+                14.0,
+                TEXT_PRIMARY,
+            ));
             ui.add_space(4.0);
             for n in &rep.notes {
                 ui.label(RichText::new(format!("• {}", n)).color(TEXT_SECONDARY));
@@ -158,31 +198,31 @@ pub fn render_dashboard(
 }
 
 fn badge_to_section(name: &str) -> Option<NavSection> {
-    if name.contains("Normalfordeling") {
+    if name.contains("Normalfordeling") || name.contains("Normality") {
         Some(NavSection::Normality)
-    } else if name.contains("Varianshomogenitet") {
+    } else if name.contains("Varianshomogenitet") || name.contains("Variance Homogeneity") {
         Some(NavSection::Variance)
-    } else if name.contains("Sfærisitet") {
+    } else if name.contains("Sfærisitet") || name.contains("Sphericity") {
         Some(NavSection::Sphericity)
-    } else if name.contains("Multikollinearitet") {
+    } else if name.contains("Multikollinearitet") || name.contains("Multicollinearity") {
         Some(NavSection::Multicollinearity)
-    } else if name.contains("Autokorrelasjon") {
+    } else if name.contains("Autokorrelasjon") || name.contains("Autocorrelation") {
         Some(NavSection::Autocorrelation)
-    } else if name.contains("Heteroskedastisitet") {
+    } else if name.contains("Heteroskedastisitet") || name.contains("Heteroscedasticity") {
         Some(NavSection::Heteroscedasticity)
-    } else if name.contains("Uteliggere") {
+    } else if name.contains("Uteliggere") || name.contains("Outliers") {
         Some(NavSection::Outliers)
-    } else if name.contains("manglende") {
+    } else if name.contains("manglende") || name.contains("Missing") || name.contains("MCAR") {
         Some(NavSection::MissingData)
-    } else if name.contains("faktoranalyse") {
+    } else if name.contains("faktoranalyse") || name.contains("Factor Analysis") || name.contains("KMO") {
         Some(NavSection::FactorSuitability)
-    } else if name.contains("Lineær regresjon") {
+    } else if name.contains("Lineær regresjon") || name.contains("Linear Regression") {
         Some(NavSection::LinearRegression)
-    } else if name.contains("Logistisk") || name.contains("ROC") {
+    } else if name.contains("Logistisk") || name.contains("Logistic") || name.contains("ROC") {
         Some(NavSection::LogisticRegression)
     } else if name.contains("Cox") {
         Some(NavSection::Survival)
-    } else if name.contains("Klyngeanalyse") {
+    } else if name.contains("Klyngeanalyse") || name.contains("Cluster Analysis") {
         Some(NavSection::Clustering)
     } else {
         None
@@ -197,20 +237,37 @@ pub fn render_normality(
 ) {
     page_header(
         ui,
-        "1. Normalfordeling",
-        "Shapiro-Wilk (n < 50), Kolmogorov-Smirnov / Lilliefors (n >= 50), skjevhet, kurtose, Histogram og Q-Q-plott",
+        tr("1. Normalfordeling", "1. Normality"),
+        tr(
+            "Shapiro-Wilk (n < 50), Kolmogorov-Smirnov / Lilliefors (n >= 50), skjevhet, kurtose, Histogram og Q-Q-plott",
+            "Shapiro-Wilk (n < 50), Kolmogorov-Smirnov / Lilliefors (n >= 50), skewness, kurtosis, Histogram & Q-Q Plot",
+        ),
     );
 
     if rep.normality_checks.is_empty() {
-        ui.label("Ingen numeriske variabler funnet for normalitetssjekk.");
+        ui.label(tr("Ingen numeriske variabler funnet for normalitetssjekk.", "No numeric variables found for normality check."));
         return;
     }
 
     show_card(ui, |ui| {
-        ui.label(bold_text("Oversikt for alle numeriske variabler (klikk en variabel for å vise plott)", 14.5, TEXT_PRIMARY));
+        ui.label(bold_text(
+            tr(
+                "Oversikt for alle numeriske variabler (klikk en variabel for å vise plott)",
+                "Overview of All Numeric Variables (click a variable to show plots)",
+            ),
+            14.5,
+            TEXT_PRIMARY,
+        ));
         ui.add_space(6.0);
         show_table(ui, "norm_tbl", |ui| {
-            table_header_row(ui, &["Variabel", "n", "Anbefalt test", "Statistikk", "p-verdi", "Skjevhet", "Kurtose", "Status"]);
+            table_header_row(
+                ui,
+                if is_en() {
+                    &["Variable", "n", "Recommended Test", "Statistic", "p-value", "Skewness", "Kurtosis", "Status"]
+                } else {
+                    &["Variabel", "n", "Anbefalt test", "Statistikk", "p-verdi", "Skjevhet", "Kurtose", "Status"]
+                },
+            );
             for (idx, nc) in rep.normality_checks.iter().enumerate() {
                 let selected = vs.selected_normality_idx == idx;
                 if ui.selectable_label(selected, bold_text(&nc.variable, 13.0, TEXT_PRIMARY)).clicked() {
@@ -282,11 +339,17 @@ pub fn render_normality(
 pub fn render_variance(ui: &mut Ui, ds: &Dataset, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "2. Varianshomogenitet & Ikke-parametriske alternativer",
-        "Levenes test, Bartletts test, Boksplott + Welchs t-test/ANOVA, Mann-Whitney U, Kruskal-Wallis og Bootstrap",
+        tr("2. Varianshomogenitet & Ikke-parametriske alternativer", "2. Variance Homogeneity & Non-parametric Alternatives"),
+        tr(
+            "Levenes test, Bartletts test, Boksplott + Student/Welchs t-test/ANOVA, Mann-Whitney U, Kruskal-Wallis og Bootstrap",
+            "Levene's test, Bartlett's test, Boxplot + Student/Welch t-test/ANOVA, Mann-Whitney U, Kruskal-Wallis & Bootstrap",
+        ),
     );
     let Some(ref vh) = rep.variance_homogeneity else {
-        ui.label("Ingen gruppekolonne ble gjenkjent automatisk. Bruk «Manuell testbenk» for å velge gruppekolonne manuelt.");
+        ui.label(tr(
+            "Ingen gruppekolonne ble gjenkjent automatisk. Bruk «Manuell testbenk» for å velge gruppekolonne manuelt.",
+            "No group column was detected automatically. Use «Manual Workbench» to pick a group column manually.",
+        ));
         return;
     };
 
@@ -390,11 +453,17 @@ pub fn render_variance(ui: &mut Ui, ds: &Dataset, rep: &AutoAnalysisReport) {
 pub fn render_sphericity(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "3. Sfærisitet (Repeated Measures ANOVA)",
-        "Mauchlys test for lik varians i differanser + Greenhouse-Geisser og Huynh-Feldt korreksjoner",
+        tr("3. Sfærisitet (Repeated Measures ANOVA)", "3. Sphericity (Repeated Measures ANOVA)"),
+        tr(
+            "Mauchlys test for lik varians i differanser + Greenhouse-Geisser og Huynh-Feldt korreksjoner",
+            "Mauchly's test for equal variance of differences + Greenhouse-Geisser and Huynh-Feldt corrections",
+        ),
     );
     let Some(ref sp) = rep.sphericity else {
-        ui.label("Ingen repeterte målinger (minst 3 numeriske kolonner) funnet. Kjør gjerne manuelt i testbenken.");
+        ui.label(tr(
+            "Ingen repeterte målinger (minst 3 numeriske kolonner) funnet. Kjør gjerne manuelt i testbenken.",
+            "No repeated measures (at least 3 numeric columns) detected. You can run it manually in the Workbench.",
+        ));
         return;
     };
 
@@ -423,11 +492,17 @@ pub fn render_sphericity(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_multicollinearity(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "4. Multikollinearitet (VIF & Korrelasjonsmatrise)",
-        "Variance Inflation Factor (< 5 anbefalt, > 10 alvorlig), korrelasjonsmatrise (|r| > 0.8), Ridge- og Lasso-regresjon",
+        tr("4. Multikollinearitet (VIF & Korrelasjonsmatrise)", "4. Multicollinearity (VIF & Correlation Matrix)"),
+        tr(
+            "Variance Inflation Factor (< 5 anbefalt, > 10 alvorlig), korrelasjonsmatrise (|r| > 0.8), Ridge- og Lasso-regresjon",
+            "Variance Inflation Factor (< 5 recommended, > 10 severe), correlation matrix (|r| > 0.8), Ridge & Lasso regression",
+        ),
     );
     let Some(ref mc) = rep.linear_regression.as_ref().and_then(|r| r.multicollinearity.as_ref()) else {
-        ui.label("Multikollinearitet krever minst 2 forklaringsvariabler i regresjon.");
+        ui.label(tr(
+            "Multikollinearitet krever minst 2 forklaringsvariabler i regresjon.",
+            "Multicollinearity requires at least 2 predictor variables in regression.",
+        ));
         return;
     };
 
@@ -492,11 +567,14 @@ pub fn render_multicollinearity(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_autocorrelation(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "5. Autokorrelasjon (Avhengige feilledd)",
-        "Durbin-Watson (nær 2.0 er bra), Breusch-Godfrey LM-test, ACF-plott, Newey-West HAC standardfeil og AR(1)",
+        tr("5. Autokorrelasjon (Avhengige feilledd)", "5. Autocorrelation (Dependent Error Terms)"),
+        tr(
+            "Durbin-Watson (nær 2.0 er bra), Breusch-Godfrey LM-test, ACF-plott, Newey-West HAC standardfeil og AR(1)",
+            "Durbin-Watson (near 2.0 is good), Breusch-Godfrey LM test, ACF plot, Newey-West HAC standard errors & AR(1)",
+        ),
     );
     let Some(ref reg) = rep.linear_regression else {
-        ui.label("Ingen lineær regresjonsmodell tilgjengelig.");
+        ui.label(tr("Ingen lineær regresjonsmodell tilgjengelig.", "No linear regression model available."));
         return;
     };
     let ac = &reg.autocorrelation;
@@ -544,11 +622,14 @@ pub fn render_autocorrelation(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_heteroscedasticity(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "6. Heteroskedastisitet (Ulik spredning i residualer)",
-        "Breusch-Pagan-test, Whites test, Residualplott + HC3 robuste standardfeil og Log-transformasjon av Y",
+        tr("6. Heteroskedastisitet (Ulik spredning i residualer)", "6. Heteroscedasticity (Non-constant Residual Variance)"),
+        tr(
+            "Breusch-Pagan-test, Whites test, Residualplott + HC3 robuste standardfeil og Log-transformasjon av Y",
+            "Breusch-Pagan test, White's test, Residual plot + HC3 robust standard errors & Log(Y) transformation",
+        ),
     );
     let Some(ref reg) = rep.linear_regression else {
-        ui.label("Ingen lineær regresjonsmodell tilgjengelig.");
+        ui.label(tr("Ingen lineær regresjonsmodell tilgjengelig.", "No linear regression model available."));
         return;
     };
     let ht = &reg.heteroscedasticity;
@@ -603,11 +684,14 @@ pub fn render_heteroscedasticity(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_outliers(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "7. Uteliggere og innflytelse",
-        "Cook's distance (D > 1 og D > 4/n), Mahalanobis-avstand, Leverage-plott og automatisk sensitivitetsanalyse",
+        tr("7. Uteliggere og innflytelse", "7. Outliers & Influence"),
+        tr(
+            "Cook's distance (D > 1 og D > 4/n), Mahalanobis-avstand, Leverage-plott og automatisk sensitivitetsanalyse",
+            "Cook's distance (D > 1 and D > 4/n), Mahalanobis distance, Leverage plot & automatic sensitivity analysis",
+        ),
     );
     let Some(ref reg) = rep.linear_regression else {
-        ui.label("Ingen regresjonsmodell tilgjengelig.");
+        ui.label(tr("Ingen regresjonsmodell tilgjengelig.", "No regression model available."));
         return;
     };
     let out = &reg.outliers;
@@ -680,8 +764,11 @@ pub fn render_outliers(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_missing(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "8. Tilfeldig manglende data (Littles MCAR, MICE & FIML)",
-        "Mønsteranalyse av manglende verdier, Littles MCAR-test og multippel imputering (MICE) / EM-estimering (FIML)",
+        tr("8. Tilfeldig manglende data (Littles MCAR, MICE & FIML)", "8. Missing Completely At Random (Little's MCAR, MICE & FIML)"),
+        tr(
+            "Mønsteranalyse av manglende verdier, Littles MCAR-test og multippel imputering (MICE) / EM-estimering (FIML)",
+            "Missingness pattern analysis, Little's MCAR test, and Multiple Imputation (MICE) / EM estimation (FIML)",
+        ),
     );
     let m = &rep.missing_data;
     callout_box(ui, &m.status, &m.interpretation, &m.recommendation);
@@ -733,11 +820,17 @@ pub fn render_missing(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_factor(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "9. Egnethet for faktoranalyse / PCA",
-        "KMO-test (bør være > 0.6), individuell MSA, Bartletts sfærisitetstest (p < 0.05) og Scree-plott",
+        tr("9. Egnethet for faktoranalyse / PCA", "9. Factor Analysis / PCA Suitability"),
+        tr(
+            "KMO-test (bør være > 0.6), individuell MSA, Bartletts sfærisitetstest (p < 0.05) og Scree-plott",
+            "KMO test (should be > 0.6), per-variable MSA, Bartlett's test of sphericity (p < 0.05) & Scree plot",
+        ),
     );
     let Some(ref fac) = rep.factor_suitability else {
-        ui.label("Trenger minst 3 numeriske kolonner for KMO og Bartletts sfærisitetstest.");
+        ui.label(tr(
+            "Trenger minst 3 numeriske kolonner for KMO og Bartletts sfærisitetstest.",
+            "Requires at least 3 numeric columns for KMO and Bartlett's test of sphericity.",
+        ));
         return;
     };
 
@@ -780,11 +873,14 @@ pub fn render_factor(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_linear_regression(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "10. Lineær regresjon — Modellkvalitet & AIC / BIC",
-        "Forklart varians (R², Justert R²), prediksjonsfeil (RMSE, MAE), koeffisienter og modellsammenligning (AIC/BIC)",
+        tr("10. Lineær regresjon — Modellkvalitet & AIC / BIC", "10. Linear Regression — Model Quality & AIC / BIC"),
+        tr(
+            "Forklart varians (R², Justert R²), prediksjonsfeil (RMSE, MAE), koeffisienter og modellsammenligning (AIC/BIC)",
+            "Explained variance (R², Adjusted R²), prediction error (RMSE, MAE), coefficients & model comparison (AIC/BIC)",
+        ),
     );
     let Some(ref reg) = rep.linear_regression else {
-        ui.label("Ingen lineær regresjonsmodell beregnet.");
+        ui.label(tr("Ingen lineær regresjonsmodell beregnet.", "No linear regression model computed."));
         return;
     };
 
@@ -851,11 +947,17 @@ pub fn render_linear_regression(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_logistic(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "11. Logistisk regresjon — Hosmer-Lemeshow & ROC / AUC",
-        "Goodness-of-fit (Hosmer-Lemeshow p > 0.05), diskrimineringsevne (ROC-kurve & AUC) og AIC / BIC",
+        tr("11. Logistisk regresjon — Hosmer-Lemeshow & ROC / AUC", "11. Logistic Regression — Hosmer-Lemeshow & ROC / AUC"),
+        tr(
+            "Goodness-of-fit (Hosmer-Lemeshow p > 0.05), diskrimineringsevne (ROC-kurve & AUC) og AIC / BIC",
+            "Goodness-of-fit (Hosmer-Lemeshow p > 0.05), discrimination (ROC curve & AUC), and AIC / BIC",
+        ),
     );
     let Some(ref lr) = rep.logistic_regression else {
-        ui.label("Ingen binær utfallskolonne ble funnet automatisk. Bruk «Manuell testbenk» for å velge målvariabel.");
+        ui.label(tr(
+            "Ingen binær utfallskolonne ble funnet automatisk. Bruk «Manuell testbenk» for å velge målvariabel.",
+            "No binary outcome column detected automatically. Use «Manual Workbench» to choose a target variable.",
+        ));
         return;
     };
 
@@ -909,11 +1011,17 @@ pub fn render_logistic(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_survival(ui: &mut Ui, rep: &AutoAnalysisReport, vs: &mut ViewState) {
     page_header(
         ui,
-        "12. Overlevelsesanalyse — Cox PH & Schoenfeld-residualer",
-        "Proporsjonal hasard-forutsetning (Schoenfeld-residualer p > 0.05 indikerer konstant risikoforhold over tid)",
+        tr("12. Overlevelsesanalyse — Cox PH & Schoenfeld-residualer", "12. Survival Analysis — Cox PH & Schoenfeld Residuals"),
+        tr(
+            "Proporsjonal hasard-forutsetning (Schoenfeld-residualer p > 0.05 indikerer konstant risikoforhold over tid)",
+            "Proportional hazards assumption (Schoenfeld residuals p > 0.05 indicate constant hazard ratio over time)",
+        ),
     );
     let Some(ref cox) = rep.cox_survival else {
-        ui.label("Ingen overlevelseskolonner (tid + hendelse) ble gjenkjent automatisk. Bruk «Manuell testbenk» for å velge kolonner.");
+        ui.label(tr(
+            "Ingen overlevelseskolonner (tid + hendelse) ble gjenkjent automatisk. Bruk «Manuell testbenk» for å velge kolonner.",
+            "No survival columns (time + event) detected automatically. Use «Manual Workbench» to pick columns.",
+        ));
         return;
     };
 
@@ -970,11 +1078,14 @@ pub fn render_survival(ui: &mut Ui, rep: &AutoAnalysisReport, vs: &mut ViewState
 pub fn render_clustering(ui: &mut Ui, rep: &AutoAnalysisReport) {
     page_header(
         ui,
-        "13. Klyngeanalyse — Silhouette-skår & Elbow-metoden",
-        "K-means++ klyngeseparasjon (Silhouette nær +1 er tydelig adskilt) og Elbow-metoden (WCSS)",
+        tr("13. Klyngeanalyse — Silhouette-skår & Elbow-metoden", "13. Cluster Analysis — Silhouette Score & Elbow Method"),
+        tr(
+            "K-means++ klyngeseparasjon (Silhouette nær +1 er tydelig adskilt), Elbow-metoden (WCSS) og DBSCAN-alternativ",
+            "K-means++ cluster separation (Silhouette near +1 means well separated), Elbow method (WCSS) & DBSCAN fallback",
+        ),
     );
     let Some(ref cl) = rep.clustering else {
-        ui.label("Trenger minst 2 numeriske variabler for klyngeanalyse.");
+        ui.label(tr("Trenger minst 2 numeriske variabler for klyngeanalyse.", "Requires at least 2 numeric variables for cluster analysis."));
         return;
     };
 
@@ -1020,15 +1131,26 @@ pub fn render_clustering(ui: &mut Ui, rep: &AutoAnalysisReport) {
 pub fn render_data_explorer(ui: &mut Ui, ds: &Dataset, vs: &mut ViewState) {
     page_header(
         ui,
-        "Datautforsker & Kolonnesammendrag",
-        &format!("Fil: {} • Skilletegn: '{}' • {} rader × {} kolonner", ds.filename, ds.delimiter, ds.row_count(), ds.headers.len()),
+        tr("Datautforsker & Kolonnesammendrag", "Data Explorer & Column Summary"),
+        &if is_en() {
+            format!("File: {} • Delimiter: '{}' • {} rows × {} columns", ds.filename, ds.delimiter, ds.row_count(), ds.headers.len())
+        } else {
+            format!("Fil: {} • Skilletegn: '{}' • {} rader × {} kolonner", ds.filename, ds.delimiter, ds.row_count(), ds.headers.len())
+        },
     );
 
     show_card(ui, |ui| {
-        ui.label(bold_text("Kolonneoversikt og deskriptiv statistikk", 14.5, TEXT_PRIMARY));
+        ui.label(bold_text(tr("Kolonneoversikt og deskriptiv statistikk", "Column Overview & Descriptive Statistics"), 14.5, TEXT_PRIMARY));
         ui.add_space(6.0);
         show_table(ui, "cols_tbl", |ui| {
-            table_header_row(ui, &["Kolonne", "Type", "Gyldige", "Mangler", "Unike", "Snitt", "SD", "Min", "Maks"]);
+            table_header_row(
+                ui,
+                if is_en() {
+                    &["Column", "Type", "Valid", "Missing", "Unique", "Mean", "SD", "Min", "Max"]
+                } else {
+                    &["Kolonne", "Type", "Gyldige", "Mangler", "Unike", "Snitt", "SD", "Min", "Maks"]
+                },
+            );
             for c in &ds.columns {
                 ui.label(bold_text(&c.name, 13.0, TEXT_PRIMARY));
                 ui.label(format!("{:?}", c.kind));

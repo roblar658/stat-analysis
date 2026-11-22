@@ -1,4 +1,5 @@
 use crate::data::{ColumnInfo, Dataset};
+use crate::i18n::{is_en, tr};
 use crate::plots::{
     svg_acf_plot, svg_boxplot, svg_calibration_plot, svg_clusters_2d, svg_corr_heatmap,
     svg_elbow_silhouette, svg_histogram, svg_leverage_cooks, svg_missingness,
@@ -216,17 +217,30 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
     charts.push(NamedChart {
         id: "missingness".to_string(),
         filename: "01_manglende_verdier.svg".to_string(),
-        title: "Manglende verdier per kolonne".to_string(),
-        category: "Manglende data".to_string(),
+        title: tr("Manglende verdier per kolonne", "Missing Values per Column").to_string(),
+        category: tr("Manglende data", "Missing Data").to_string(),
         description: missing_data.interpretation.clone(),
-        svg: svg_missingness("Manglende verdier per kolonne (%)", &missing_data.columns),
+        svg: svg_missingness(
+            tr("Manglende verdier per kolonne (%)", "Missing Values per Column (%)"),
+            &missing_data.columns,
+        ),
     });
     summary_badges.push(SummaryBadge {
-        check_name: "Tilfeldig manglende data (Littles MCAR)".to_string(),
-        category: "Forutsetninger".to_string(),
+        check_name: tr(
+            "Tilfeldig manglende data (Littles MCAR)",
+            "Missing Completely At Random (Little's MCAR)",
+        )
+        .to_string(),
+        category: tr("Forutsetninger", "Assumptions").to_string(),
         status: missing_data.status.clone(),
         headline: if let Some(p) = missing_data.mcar_p_value {
-            format!("{:.1}% mangler | MCAR p = {:.4}", missing_data.overall_missing_pct, p)
+            if is_en() {
+                format!("{:.1}% missing | MCAR p = {:.4}", missing_data.overall_missing_pct, p)
+            } else {
+                format!("{:.1}% mangler | MCAR p = {:.4}", missing_data.overall_missing_pct, p)
+            }
+        } else if is_en() {
+            format!("{:.1}% missing", missing_data.overall_missing_pct)
         } else {
             format!("{:.1}% mangler", missing_data.overall_missing_pct)
         },
@@ -278,18 +292,30 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
         }
         .to_string();
         summary_badges.push(SummaryBadge {
-            check_name: "Normalfordeling (Shapiro-Wilk / KS)".to_string(),
-            category: "Forutsetninger".to_string(),
+            check_name: tr("Normalfordeling (Shapiro-Wilk / KS)", "Normality (Shapiro-Wilk / KS)").to_string(),
+            category: tr("Forutsetninger", "Assumptions").to_string(),
             status,
-            headline: format!(
-                "{} av {} variabler oppfyller normalitet",
-                normality_checks.len() - non_norm,
-                normality_checks.len()
-            ),
-            action: if non_norm == 0 {
-                "Parametriske metoder er trygge å bruke.".to_string()
+            headline: if is_en() {
+                format!(
+                    "{} of {} variables satisfy normality",
+                    normality_checks.len() - non_norm,
+                    normality_checks.len()
+                )
             } else {
-                "Bruk Mann-Whitney, Kruskal-Wallis eller bootstrapping for ikke-normale variabler.".to_string()
+                format!(
+                    "{} av {} variabler oppfyller normalitet",
+                    normality_checks.len() - non_norm,
+                    normality_checks.len()
+                )
+            },
+            action: if non_norm == 0 {
+                tr("Parametriske metoder er trygge å bruke.", "Parametric methods are safe to use.").to_string()
+            } else {
+                tr(
+                    "Bruk Mann-Whitney, Kruskal-Wallis eller bootstrapping for ikke-normale variabler.",
+                    "Use Mann-Whitney, Kruskal-Wallis, or bootstrapping for non-normal variables.",
+                )
+                .to_string()
             },
         });
     }
@@ -356,21 +382,38 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                             if all_groups_normal && equal_var {
                                 if let Some(ref st) = vh.student_t_test {
                                     recommended_analyses.push(RecommendedAnalysis {
-                                        domain: format!("Gruppesammenligning (2 grupper: {})", g_col),
+                                        domain: if is_en() {
+                                            format!("Group comparison (2 groups: {})", g_col)
+                                        } else {
+                                            format!("Gruppesammenligning (2 grupper: {})", g_col)
+                                        },
                                         outcome: out_col.clone(),
-                                        chosen_test: "Student uavhengig t-test".into(),
-                                        why_chosen: format!(
-                                            "Normalfordeling oppfylt i begge grupper og varianshomogenitet oppfylt (Levene p = {:.4} >= {:.2}) -> Student uavhengig t-test gir mening og er valgt.",
-                                            vh.levene_median.p_value, alpha
-                                        ),
+                                        chosen_test: tr("Student uavhengig t-test", "Student's independent t-test").into(),
+                                        why_chosen: if is_en() {
+                                            format!(
+                                                "Normality met in both groups and homogeneity of variance met (Levene p = {:.4} >= {:.2}) -> Student's independent t-test is appropriate and selected.",
+                                                vh.levene_median.p_value, alpha
+                                            )
+                                        } else {
+                                            format!(
+                                                "Normalfordeling oppfylt i begge grupper og varianshomogenitet oppfylt (Levene p = {:.4} >= {:.2}) -> Student uavhengig t-test gir mening og er valgt.",
+                                                vh.levene_median.p_value, alpha
+                                            )
+                                        },
                                         formula_and_calc: format!(
                                             "t = (x1_bar - x2_bar) / (s_p * sqrt(1/n1 + 1/n2)) = ({:.3} - {:.3}) / ({:.3} * sqrt(1/{} + 1/{})) = {:.3}, df = {}, Cohen's d = {:.3}",
                                             st.mean1, st.mean2, st.pooled_sd, st.n1, st.n2, st.t_stat, st.df, st.cohens_d
                                         ),
                                         result_summary: format!(
-                                            "t({}) = {:.3}, p = {:.4}, differanse = {:.3}, Cohen's d = {:.3} ({})",
-                                            st.df, st.t_stat, st.p_value, st.mean_diff, st.cohens_d,
-                                            if st.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                            "t({}) = {:.3}, p = {:.4}, {} = {:.3}, Cohen's d = {:.3} ({})",
+                                            st.df, st.t_stat, st.p_value,
+                                            tr("differanse", "diff"),
+                                            st.mean_diff, st.cohens_d,
+                                            if st.significant {
+                                                tr("signifikant gruppeforskjell", "significant group difference")
+                                            } else {
+                                                tr("ingen signifikant forskjell", "no significant difference")
+                                            }
                                         ),
                                         p_value: Some(st.p_value),
                                         significant: st.significant,
@@ -379,21 +422,38 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                             } else if all_groups_normal && !equal_var {
                                 if let Some(ref wt) = vh.welch_t_test {
                                     recommended_analyses.push(RecommendedAnalysis {
-                                        domain: format!("Gruppesammenligning (2 grupper: {})", g_col),
+                                        domain: if is_en() {
+                                            format!("Group comparison (2 groups: {})", g_col)
+                                        } else {
+                                            format!("Gruppesammenligning (2 grupper: {})", g_col)
+                                        },
                                         outcome: out_col.clone(),
-                                        chosen_test: "Welchs t-test".into(),
-                                        why_chosen: format!(
-                                            "Normalfordeling oppfylt, men varianshomogenitet brutt (Levene p = {:.4} < {:.2}) -> Welchs t-test er valgt fremfor Student t-test.",
-                                            vh.levene_median.p_value, alpha
-                                        ),
+                                        chosen_test: tr("Welchs t-test", "Welch's t-test").into(),
+                                        why_chosen: if is_en() {
+                                            format!(
+                                                "Normality met, but homogeneity of variance violated (Levene p = {:.4} < {:.2}) -> Welch's t-test selected over Student's t-test.",
+                                                vh.levene_median.p_value, alpha
+                                            )
+                                        } else {
+                                            format!(
+                                                "Normalfordeling oppfylt, men varianshomogenitet brutt (Levene p = {:.4} < {:.2}) -> Welchs t-test er valgt fremfor Student t-test.",
+                                                vh.levene_median.p_value, alpha
+                                            )
+                                        },
                                         formula_and_calc: format!(
                                             "t = (x1_bar - x2_bar) / sqrt(s1^2/n1 + s2^2/n2) = {:.3}, Welch-Satterthwaite df = {:.1}",
                                             wt.t_stat, wt.df
                                         ),
                                         result_summary: format!(
-                                            "t({:.1}) = {:.3}, p = {:.4}, differanse = {:.3} ({})",
-                                            wt.df, wt.t_stat, wt.p_value, wt.mean_diff,
-                                            if wt.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                            "t({:.1}) = {:.3}, p = {:.4}, {} = {:.3} ({})",
+                                            wt.df, wt.t_stat, wt.p_value,
+                                            tr("differanse", "diff"),
+                                            wt.mean_diff,
+                                            if wt.significant {
+                                                tr("signifikant gruppeforskjell", "significant group difference")
+                                            } else {
+                                                tr("ingen signifikant forskjell", "no significant difference")
+                                            }
                                         ),
                                         p_value: Some(wt.p_value),
                                         significant: wt.significant,
@@ -401,10 +461,22 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                                 }
                             } else if let Some(ref m) = mw {
                                 recommended_analyses.push(RecommendedAnalysis {
-                                    domain: format!("Gruppesammenligning (2 grupper: {})", g_col),
+                                    domain: if is_en() {
+                                        format!("Group comparison (2 groups: {})", g_col)
+                                    } else {
+                                        format!("Gruppesammenligning (2 grupper: {})", g_col)
+                                    },
                                     outcome: out_col.clone(),
-                                    chosen_test: "Mann-Whitney U-test (ikke-parametrisk)".into(),
-                                    why_chosen: "Normalfordeling brutt i minst én gruppe -> ikke-parametrisk Mann-Whitney U er valgt fremfor t-test.".into(),
+                                    chosen_test: tr(
+                                        "Mann-Whitney U-test (ikke-parametrisk)",
+                                        "Mann-Whitney U test (non-parametric)",
+                                    )
+                                    .into(),
+                                    why_chosen: tr(
+                                        "Normalfordeling brutt i minst én gruppe -> ikke-parametrisk Mann-Whitney U er valgt fremfor t-test.",
+                                        "Normality violated in at least one group -> non-parametric Mann-Whitney U selected over t-test.",
+                                    )
+                                    .into(),
                                     formula_and_calc: format!(
                                         "U = min(U1, U2) = {:.1}, Z = {:.3}, median({}) = {:.3}, median({}) = {:.3}",
                                         m.u_stat, m.z_stat, m.group1, m.median1, m.group2, m.median2
@@ -412,7 +484,11 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                                     result_summary: format!(
                                         "U = {:.1}, Z = {:.3}, p = {:.4} ({})",
                                         m.u_stat, m.z_stat, m.p_value,
-                                        if m.significant { "signifikant forskjell mellom gruppene" } else { "ingen signifikant forskjell" }
+                                        if m.significant {
+                                            tr("signifikant forskjell mellom gruppene", "significant difference between groups")
+                                        } else {
+                                            tr("ingen signifikant forskjell", "no significant difference")
+                                        }
                                     ),
                                     p_value: Some(m.p_value),
                                     significant: m.significant,
@@ -421,13 +497,24 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                         } else if all_groups_normal && equal_var {
                             let an = &vh.standard_anova;
                             recommended_analyses.push(RecommendedAnalysis {
-                                domain: format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col),
+                                domain: if is_en() {
+                                    format!("Group comparison ({} groups: {})", groups.len(), g_col)
+                                } else {
+                                    format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col)
+                                },
                                 outcome: out_col.clone(),
-                                chosen_test: "Standard enveis ANOVA".into(),
-                                why_chosen: format!(
-                                    "Normalfordeling oppfylt i gruppene og varianshomogenitet oppfylt (Levene p = {:.4} >= {:.2}) -> standard enveis ANOVA er valgt.",
-                                    vh.levene_median.p_value, alpha
-                                ),
+                                chosen_test: tr("Standard enveis ANOVA", "Standard one-way ANOVA").into(),
+                                why_chosen: if is_en() {
+                                    format!(
+                                        "Normality and variance homogeneity met (Levene p = {:.4} >= {:.2}) -> standard one-way ANOVA selected.",
+                                        vh.levene_median.p_value, alpha
+                                    )
+                                } else {
+                                    format!(
+                                        "Normalfordeling oppfylt i gruppene og varianshomogenitet oppfylt (Levene p = {:.4} >= {:.2}) -> standard enveis ANOVA er valgt.",
+                                        vh.levene_median.p_value, alpha
+                                    )
+                                },
                                 formula_and_calc: format!(
                                     "F = MSB / MSW = ({:.2} / {}) / ({:.2} / {}) = {:.3}, eta^2 = SSB / SST = {:.4}",
                                     an.ss_between, an.df1, an.ss_within, an.df2, an.f_stat, an.eta_squared
@@ -435,7 +522,11 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                                 result_summary: format!(
                                     "F({}, {}) = {:.3}, p = {:.4}, eta^2 = {:.3} ({})",
                                     an.df1, an.df2, an.f_stat, an.p_value, an.eta_squared,
-                                    if an.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                    if an.significant {
+                                        tr("signifikant gruppeforskjell", "significant group difference")
+                                    } else {
+                                        tr("ingen signifikant forskjell", "no significant difference")
+                                    }
                                 ),
                                 p_value: Some(an.p_value),
                                 significant: an.significant,
@@ -443,13 +534,24 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                         } else if all_groups_normal && !equal_var {
                             let wa = &vh.welch_anova;
                             recommended_analyses.push(RecommendedAnalysis {
-                                domain: format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col),
+                                domain: if is_en() {
+                                    format!("Group comparison ({} groups: {})", groups.len(), g_col)
+                                } else {
+                                    format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col)
+                                },
                                 outcome: out_col.clone(),
-                                chosen_test: "Welchs ANOVA".into(),
-                                why_chosen: format!(
-                                    "Normalfordeling oppfylt, men varianshomogenitet brutt (Levene p = {:.4} < {:.2}) -> Welchs ANOVA er valgt.",
-                                    vh.levene_median.p_value, alpha
-                                ),
+                                chosen_test: tr("Welchs ANOVA", "Welch's ANOVA").into(),
+                                why_chosen: if is_en() {
+                                    format!(
+                                        "Normality met, but variance homogeneity violated (Levene p = {:.4} < {:.2}) -> Welch's ANOVA selected.",
+                                        vh.levene_median.p_value, alpha
+                                    )
+                                } else {
+                                    format!(
+                                        "Normalfordeling oppfylt, men varianshomogenitet brutt (Levene p = {:.4} < {:.2}) -> Welchs ANOVA er valgt.",
+                                        vh.levene_median.p_value, alpha
+                                    )
+                                },
                                 formula_and_calc: format!(
                                     "F_Welch = {:.3}, df1 = {:.1}, df2 = {:.1}",
                                     wa.f_stat, wa.df1, wa.df2
@@ -457,25 +559,45 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                                 result_summary: format!(
                                     "F({:.1}, {:.1}) = {:.3}, p = {:.4} ({})",
                                     wa.df1, wa.df2, wa.f_stat, wa.p_value,
-                                    if wa.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                    if wa.significant {
+                                        tr("signifikant gruppeforskjell", "significant group difference")
+                                    } else {
+                                        tr("ingen signifikant forskjell", "no significant difference")
+                                    }
                                 ),
                                 p_value: Some(wa.p_value),
                                 significant: wa.significant,
                             });
                         } else if let Some(ref k) = kw {
                             recommended_analyses.push(RecommendedAnalysis {
-                                domain: format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col),
+                                domain: if is_en() {
+                                    format!("Group comparison ({} groups: {})", groups.len(), g_col)
+                                } else {
+                                    format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col)
+                                },
                                 outcome: out_col.clone(),
-                                chosen_test: "Kruskal-Wallis H-test (ikke-parametrisk)".into(),
-                                why_chosen: "Normalfordeling brutt i minst én gruppe -> ikke-parametrisk Kruskal-Wallis H er valgt fremfor ANOVA.".into(),
+                                chosen_test: tr(
+                                    "Kruskal-Wallis H-test (ikke-parametrisk)",
+                                    "Kruskal-Wallis H test (non-parametric)",
+                                )
+                                .into(),
+                                why_chosen: tr(
+                                    "Normalfordeling brutt i minst én gruppe -> ikke-parametrisk Kruskal-Wallis H er valgt fremfor ANOVA.",
+                                    "Normality violated in at least one group -> non-parametric Kruskal-Wallis H selected over ANOVA.",
+                                )
+                                .into(),
                                 formula_and_calc: format!(
-                                    "H = [12 / (N(N+1))] * sum(R_i^2/n_i) - 3(N+1) (tie-korrigert) = {:.3}, df = {}",
+                                    "H = [12 / (N(N+1))] * sum(R_i^2/n_i) - 3(N+1) (tie-corrected) = {:.3}, df = {}",
                                     k.h_stat, k.df
                                 ),
                                 result_summary: format!(
                                     "H({}) = {:.3}, p = {:.4} ({})",
                                     k.df, k.h_stat, k.p_value,
-                                    if k.significant { "signifikant forskjell mellom gruppene" } else { "ingen signifikant forskjell" }
+                                    if k.significant {
+                                        tr("signifikant forskjell mellom gruppene", "significant difference between groups")
+                                    } else {
+                                        tr("ingen signifikant forskjell", "no significant difference")
+                                    }
                                 ),
                                 p_value: Some(k.p_value),
                                 significant: k.significant,
@@ -486,18 +608,22 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                             charts.push(NamedChart {
                                 id: "boxplot_groups".to_string(),
                                 filename: "03_boksplott_grupper.svg".to_string(),
-                                title: format!("Boksplott: {} per {}", out_col, g_col),
-                                category: "Varianshomogenitet".to_string(),
+                                title: format!("{}: {} / {}", tr("Boksplott", "Boxplot"), out_col, g_col),
+                                category: tr("Varianshomogenitet", "Variance Homogeneity").to_string(),
                                 description: vh.interpretation.clone(),
                                 svg: svg_boxplot(
-                                    &format!("Boksplott: {} fordelt på {}", out_col, g_col),
+                                    &format!("{}: {} ({})", tr("Boksplott", "Boxplot"), out_col, g_col),
                                     out_col,
                                     &groups,
                                 ),
                             });
                             summary_badges.push(SummaryBadge {
-                                check_name: "Varianshomogenitet (Levene / Bartlett)".to_string(),
-                                category: "Forutsetninger".to_string(),
+                                check_name: tr(
+                                    "Varianshomogenitet (Levene / Bartlett)",
+                                    "Variance Homogeneity (Levene / Bartlett)",
+                                )
+                                .to_string(),
+                                category: tr("Forutsetninger", "Assumptions").to_string(),
                                 status: vh.status.clone(),
                                 headline: format!(
                                     "Levene p = {:.4} | Bartlett p = {:.4}",
@@ -515,7 +641,13 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
             }
         }
     } else {
-        notes.push("Ingen kategorisk gruppekolonne funnet for automatisk Levene/Bartlett-test — kan kjøres manuelt.".to_string());
+        notes.push(
+            tr(
+                "Ingen kategorisk gruppekolonne funnet for automatisk Levene/Bartlett-test — kan kjøres manuelt.",
+                "No categorical group column detected for automatic Levene/Bartlett test — can be run manually.",
+            )
+            .to_string(),
+        );
     }
 
     // 4. Sphericity (Repeated Measures ANOVA)
@@ -537,8 +669,8 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     ),
                 });
                 summary_badges.push(SummaryBadge {
-                    check_name: "Sfærisitet (Mauchlys test)".to_string(),
-                    category: "Forutsetninger".to_string(),
+                    check_name: tr("Sfærisitet (Mauchlys test)", "Sphericity (Mauchly's Test)").to_string(),
+                    category: tr("Forutsetninger", "Assumptions").to_string(),
                     status: sp.status.clone(),
                     headline: format!(
                         "W = {:.3}, p = {:.4} | GG ε = {:.3}",
@@ -547,25 +679,29 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     action: sp.recommendation.clone(),
                 });
                 let (rm_name, rm_p, rm_eps_str) = if sp.sphericity_met {
-                    ("Repeated Measures ANOVA (ukorrigert)", sp.p_uncorrected, format!("df = ({:.1}, {:.1})", sp.df1_uncorrected, sp.df2_uncorrected))
+                    (tr("Repeated Measures ANOVA (ukorrigert)", "Repeated Measures ANOVA (uncorrected)"), sp.p_uncorrected, format!("df = ({:.1}, {:.1})", sp.df1_uncorrected, sp.df2_uncorrected))
                 } else if sp.epsilon_gg < 0.75 {
-                    ("Repeated Measures ANOVA (Greenhouse-Geisser)", sp.p_greenhouse_geisser, format!("eps_GG = {:.3}, df_korr = ({:.2}, {:.2})", sp.epsilon_gg, sp.df1_uncorrected * sp.epsilon_gg, sp.df2_uncorrected * sp.epsilon_gg))
+                    ("Repeated Measures ANOVA (Greenhouse-Geisser)", sp.p_greenhouse_geisser, format!("eps_GG = {:.3}, df_corr = ({:.2}, {:.2})", sp.epsilon_gg, sp.df1_uncorrected * sp.epsilon_gg, sp.df2_uncorrected * sp.epsilon_gg))
                 } else {
-                    ("Repeated Measures ANOVA (Huynh-Feldt)", sp.p_huynh_feldt, format!("eps_HF = {:.3}, df_korr = ({:.2}, {:.2})", sp.epsilon_hf, sp.df1_uncorrected * sp.epsilon_hf, sp.df2_uncorrected * sp.epsilon_hf))
+                    ("Repeated Measures ANOVA (Huynh-Feldt)", sp.p_huynh_feldt, format!("eps_HF = {:.3}, df_corr = ({:.2}, {:.2})", sp.epsilon_hf, sp.df1_uncorrected * sp.epsilon_hf, sp.df2_uncorrected * sp.epsilon_hf))
                 };
                 recommended_analyses.push(RecommendedAnalysis {
-                    domain: "Repeterte målinger".into(),
+                    domain: tr("Repeterte målinger", "Repeated measures").into(),
                     outcome: sp.columns.join(" / "),
                     chosen_test: rm_name.into(),
                     why_chosen: sp.recommendation.clone(),
                     formula_and_calc: format!(
-                        "Mauchly W = {:.4} (p = {:.4}); F = MS_betingelse / MS_feil = {:.3}, {}",
+                        "Mauchly W = {:.4} (p = {:.4}); F = MS_cond / MS_err = {:.3}, {}",
                         sp.mauchly_w, sp.mauchly_p_value, sp.rm_anova_f, rm_eps_str
                     ),
                     result_summary: format!(
                         "F = {:.3}, p = {:.4} ({})",
                         sp.rm_anova_f, rm_p,
-                        if rm_p < alpha { "signifikant endring over målingene" } else { "ingen signifikant endring" }
+                        if rm_p < alpha {
+                            tr("signifikant endring over målingene", "significant change across measures")
+                        } else {
+                            tr("ingen signifikant endring", "no significant change")
+                        }
                     ),
                     p_value: Some(rm_p),
                     significant: rm_p < alpha,
@@ -631,8 +767,12 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                             });
                         }
                         summary_badges.push(SummaryBadge {
-                            check_name: "Cox proporsjonal hasard (Schoenfeld)".to_string(),
-                            category: "Modellkvalitet".to_string(),
+                            check_name: tr(
+                                "Cox proporsjonal hasard (Schoenfeld)",
+                                "Cox Proportional Hazards (Schoenfeld)",
+                            )
+                            .to_string(),
+                            category: tr("Modellkvalitet", "Model Quality").to_string(),
                             status: cox.status.clone(),
                             headline: format!(
                                 "Global p = {:.4} | C-index = {:.3}",
@@ -646,7 +786,13 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
             }
         }
     } else {
-        notes.push("Ingen tydelig overlevelseskolonne (tid + hendelse) gjenkjent automatisk — Cox/Schoenfeld kan kjøres manuelt.".to_string());
+        notes.push(
+            tr(
+                "Ingen tydelig overlevelseskolonne (tid + hendelse) gjenkjent automatisk — Cox/Schoenfeld kan kjøres manuelt.",
+                "No clear survival columns (time + event) detected automatically — Cox/Schoenfeld can be run manually.",
+            )
+            .to_string(),
+        );
     }
 
     // 6. Linear Regression + Multicollinearity + Autocorrelation + Heteroscedasticity + Outliers + R2/RMSE/AIC/BIC
@@ -729,20 +875,20 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                         ),
                     });
                     summary_badges.push(SummaryBadge {
-                        check_name: "Multikollinearitet (VIF)".to_string(),
-                        category: "Forutsetninger".to_string(),
+                        check_name: tr("Multikollinearitet (VIF)", "Multicollinearity (VIF)").to_string(),
+                        category: tr("Forutsetninger", "Assumptions").to_string(),
                         status: mc.status.clone(),
-                        headline: format!(
-                            "Maks VIF = {:.2} | {} par |r| > 0.8",
-                            mc.max_vif,
-                            mc.high_corr_pairs.len()
-                        ),
+                        headline: if is_en() {
+                            format!("Max VIF = {:.2} | {} pair(s) |r| > 0.8", mc.max_vif, mc.high_corr_pairs.len())
+                        } else {
+                            format!("Maks VIF = {:.2} | {} par |r| > 0.8", mc.max_vif, mc.high_corr_pairs.len())
+                        },
                         action: mc.recommendation.clone(),
                     });
                 }
                 summary_badges.push(SummaryBadge {
-                    check_name: "Autokorrelasjon (Durbin-Watson / BG)".to_string(),
-                    category: "Forutsetninger".to_string(),
+                    check_name: tr("Autokorrelasjon (Durbin-Watson / BG)", "Autocorrelation (Durbin-Watson / BG)").to_string(),
+                    category: tr("Forutsetninger", "Assumptions").to_string(),
                     status: reg.autocorrelation.status.clone(),
                     headline: format!(
                         "DW = {:.3} | BG p = {:.4}",
@@ -751,8 +897,8 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     action: reg.autocorrelation.recommendation.clone(),
                 });
                 summary_badges.push(SummaryBadge {
-                    check_name: "Heteroskedastisitet (Breusch-Pagan / White)".to_string(),
-                    category: "Forutsetninger".to_string(),
+                    check_name: tr("Heteroskedastisitet (Breusch-Pagan / White)", "Heteroscedasticity (Breusch-Pagan / White)").to_string(),
+                    category: tr("Forutsetninger", "Assumptions").to_string(),
                     status: reg.heteroscedasticity.status.clone(),
                     headline: format!(
                         "BP p = {:.4} | White p = {:.4}",
@@ -761,8 +907,8 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     action: reg.heteroscedasticity.recommendation.clone(),
                 });
                 summary_badges.push(SummaryBadge {
-                    check_name: "Uteliggere & innflytelse (Cook's D / Mahalanobis)".to_string(),
-                    category: "Forutsetninger".to_string(),
+                    check_name: tr("Uteliggere & innflytelse (Cook's D / Mahalanobis)", "Outliers & Influence (Cook's D / Mahalanobis)").to_string(),
+                    category: tr("Forutsetninger", "Assumptions").to_string(),
                     status: reg.outliers.status.clone(),
                     headline: format!(
                         "Cook's D > 4/n: {} | Mahalanobis: {}",
@@ -771,8 +917,12 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     action: reg.outliers.recommendation.clone(),
                 });
                 summary_badges.push(SummaryBadge {
-                    check_name: format!("Lineær regresjon — Tilpasning ({})", target),
-                    category: "Modellkvalitet".to_string(),
+                    check_name: if is_en() {
+                        format!("Linear Regression — Fit ({})", target)
+                    } else {
+                        format!("Lineær regresjon — Tilpasning ({})", target)
+                    },
+                    category: tr("Modellkvalitet", "Model Quality").to_string(),
                     status: if reg.adj_r_squared >= 0.5 {
                         "ok"
                     } else if reg.adj_r_squared >= 0.2 {
@@ -782,39 +932,78 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     }
                     .to_string(),
                     headline: format!(
-                        "R² = {:.3} (Just. {:.3}) | RMSE = {:.3} | MAE = {:.3} | AIC = {:.1}",
-                        reg.r_squared, reg.adj_r_squared, reg.rmse, reg.mae, reg.aic
+                        "R² = {:.3} ({} {:.3}) | RMSE = {:.3} | MAE = {:.3} | AIC = {:.1}",
+                        reg.r_squared, tr("Just.", "Adj."), reg.adj_r_squared, reg.rmse, reg.mae, reg.aic
                     ),
-                    action: "Sammenlign AIC/BIC mot reduserte modeller i tabellen under.".to_string(),
+                    action: tr(
+                        "Sammenlign AIC/BIC mot reduserte modeller i tabellen under.",
+                        "Compare AIC/BIC against reduced models in the table below.",
+                    )
+                    .to_string(),
                 });
                 let high_vif = reg.multicollinearity.as_ref().map(|m| m.max_vif > 10.0).unwrap_or(false);
                 let hetero = reg.heteroscedasticity.bp_p_value < alpha || reg.heteroscedasticity.white_p_value < alpha;
                 let autocorr = reg.autocorrelation.bg_p_value < alpha || reg.autocorrelation.durbin_watson < 1.5 || reg.autocorrelation.durbin_watson > 2.5;
                 let (reg_choice, reg_why) = if high_vif {
-                    ("Ridge / Lasso-regresjon (eller variabelreduksjon)", format!("Alvorlig multikollinearitet (maks VIF = {:.2} > 10) -> bruk Ridge/Lasso eller fjern kollineære prediktorer.", reg.multicollinearity.as_ref().unwrap().max_vif))
+                    (
+                        tr("Ridge / Lasso-regresjon (eller variabelreduksjon)", "Ridge / Lasso regression (or predictor reduction)"),
+                        if is_en() {
+                            format!("Severe multicollinearity (max VIF = {:.2} > 10) -> use Ridge/Lasso or drop collinear predictors.", reg.multicollinearity.as_ref().unwrap().max_vif)
+                        } else {
+                            format!("Alvorlig multikollinearitet (maks VIF = {:.2} > 10) -> bruk Ridge/Lasso eller fjern kollineære prediktorer.", reg.multicollinearity.as_ref().unwrap().max_vif)
+                        },
+                    )
                 } else if autocorr {
-                    ("OLS med Newey-West (HAC) standardfeil / AR(1)", format!("Autokorrelasjon påvist (DW = {:.3}, BG p = {:.4}) -> Newey-West HAC standardfeil valgt.", reg.autocorrelation.durbin_watson, reg.autocorrelation.bg_p_value))
+                    (
+                        tr("OLS med Newey-West (HAC) standardfeil / AR(1)", "OLS with Newey-West (HAC) standard errors / AR(1)"),
+                        if is_en() {
+                            format!("Autocorrelation detected (DW = {:.3}, BG p = {:.4}) -> Newey-West HAC standard errors selected.", reg.autocorrelation.durbin_watson, reg.autocorrelation.bg_p_value)
+                        } else {
+                            format!("Autokorrelasjon påvist (DW = {:.3}, BG p = {:.4}) -> Newey-West HAC standardfeil valgt.", reg.autocorrelation.durbin_watson, reg.autocorrelation.bg_p_value)
+                        },
+                    )
                 } else if hetero {
                     if reg.heteroscedasticity.log_y_fallback.improved {
-                        ("OLS med HC3 robuste standardfeil eller Log(Y)-regresjon", format!("Heteroskedastisitet påvist (BP p = {:.4}) -> HC3 eller ln(Y) (BP p = {:.4}) anbefales.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.log_y_fallback.bp_p_value.unwrap_or(0.0)))
+                        (
+                            tr("OLS med HC3 robuste standardfeil eller Log(Y)-regresjon", "OLS with HC3 robust SEs or Log(Y) regression"),
+                            if is_en() {
+                                format!("Heteroscedasticity detected (BP p = {:.4}) -> HC3 or ln(Y) (BP p = {:.4}) recommended.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.log_y_fallback.bp_p_value.unwrap_or(0.0))
+                            } else {
+                                format!("Heteroskedastisitet påvist (BP p = {:.4}) -> HC3 eller ln(Y) (BP p = {:.4}) anbefales.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.log_y_fallback.bp_p_value.unwrap_or(0.0))
+                            },
+                        )
                     } else {
-                        ("OLS med HC3 robuste standardfeil", format!("Heteroskedastisitet påvist (BP p = {:.4}, White p = {:.4}) -> HC3 robuste standardfeil er valgt.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.white_p_value))
+                        (
+                            tr("OLS med HC3 robuste standardfeil", "OLS with HC3 robust standard errors"),
+                            if is_en() {
+                                format!("Heteroscedasticity detected (BP p = {:.4}, White p = {:.4}) -> HC3 robust standard errors selected.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.white_p_value)
+                            } else {
+                                format!("Heteroskedastisitet påvist (BP p = {:.4}, White p = {:.4}) -> HC3 robuste standardfeil er valgt.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.white_p_value)
+                            },
+                        )
                     }
                 } else {
-                    ("Standard OLS lineær regresjon", "Forutsetningene om homoskedastisitet, uavhengige feilledd og lav VIF er oppfylt -> standard OLS er gyldig.".into())
+                    (
+                        tr("Standard OLS lineær regresjon", "Standard OLS linear regression"),
+                        tr(
+                            "Forutsetningene om homoskedastisitet, uavhengige feilledd og lav VIF er oppfylt -> standard OLS er gyldig.",
+                            "Homoscedasticity, independent errors, and low VIF assumptions are met -> standard OLS is valid.",
+                        )
+                        .into(),
+                    )
                 };
                 recommended_analyses.push(RecommendedAnalysis {
-                    domain: "Lineær regresjonsmodell".into(),
+                    domain: tr("Lineær regresjonsmodell", "Linear regression model").into(),
                     outcome: reg.target.clone(),
                     chosen_test: reg_choice.into(),
                     why_chosen: reg_why,
                     formula_and_calc: format!(
-                        "R^2 = 1 - RSS/TSS = {:.4}, Just. R^2 = {:.4}, RMSE = sqrt(RSS/{}) = {:.3}, AIC = {:.1}, BIC = {:.1}",
-                        reg.r_squared, reg.adj_r_squared, reg.n, reg.rmse, reg.aic, reg.bic
+                        "R^2 = 1 - RSS/TSS = {:.4}, {} R^2 = {:.4}, RMSE = sqrt(RSS/{}) = {:.3}, AIC = {:.1}, BIC = {:.1}",
+                        reg.r_squared, tr("Just.", "Adj."), reg.adj_r_squared, reg.n, reg.rmse, reg.aic, reg.bic
                     ),
                     result_summary: format!(
-                        "F = {:.2} (p = {:.4}), R^2 = {:.3}, Just. R^2 = {:.3}, RMSE = {:.3}",
-                        reg.f_stat, reg.f_p_value, reg.r_squared, reg.adj_r_squared, reg.rmse
+                        "F = {:.2} (p = {:.4}), R^2 = {:.3}, {} R^2 = {:.3}, RMSE = {:.3}",
+                        reg.f_stat, reg.f_p_value, reg.r_squared, tr("Just.", "Adj."), reg.adj_r_squared, reg.rmse
                     ),
                     p_value: Some(reg.f_p_value),
                     significant: reg.f_p_value < alpha,
@@ -839,8 +1028,12 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     svg: svg_scree_plot("Scree-plott — Egenverdier og Kaiser-kriterium", &fac.eigenvalues),
                 });
                 summary_badges.push(SummaryBadge {
-                    check_name: "Egnethet for faktoranalyse (KMO / Bartlett)".to_string(),
-                    category: "Forutsetninger".to_string(),
+                    check_name: tr(
+                        "Egnethet for faktoranalyse (KMO / Bartlett)",
+                        "Factor Analysis Suitability (KMO / Bartlett)",
+                    )
+                    .to_string(),
+                    category: tr("Forutsetninger", "Assumptions").to_string(),
                     status: fac.status.clone(),
                     headline: format!(
                         "KMO = {:.3} | Bartlett p = {:.4}",
@@ -916,8 +1109,12 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                             ),
                         });
                         summary_badges.push(SummaryBadge {
-                            check_name: format!("Logistisk tilpasning — Hosmer-Lemeshow ({})", bin_target),
-                            category: "Modellkvalitet".to_string(),
+                            check_name: if is_en() {
+                                format!("Logistic Fit — Hosmer-Lemeshow ({})", bin_target)
+                            } else {
+                                format!("Logistisk tilpasning — Hosmer-Lemeshow ({})", bin_target)
+                            },
+                            category: tr("Modellkvalitet", "Model Quality").to_string(),
                             status: lr.hl_status.clone(),
                             headline: format!(
                                 "χ²({}) = {:.2}, p = {:.4}",
@@ -928,16 +1125,29 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                             action: lr.recommendation.clone(),
                         });
                         summary_badges.push(SummaryBadge {
-                            check_name: format!("Klassifisering — ROC & AUC ({})", bin_target),
-                            category: "Modellkvalitet".to_string(),
+                            check_name: if is_en() {
+                                format!("Classification — ROC & AUC ({})", bin_target)
+                            } else {
+                                format!("Klassifisering — ROC & AUC ({})", bin_target)
+                            },
+                            category: tr("Modellkvalitet", "Model Quality").to_string(),
                             status: lr.auc_status.clone(),
                             headline: format!("AUC = {:.3} ({}) | AIC = {:.1}", lr.auc, lr.auc_label, lr.aic),
-                            action: format!(
-                                "Optimal grense = {:.3} (Nøyaktighet {:.1}%, F1 = {:.3}).",
-                                lr.confusion_matrix.threshold,
-                                lr.confusion_matrix.accuracy * 100.0,
-                                lr.confusion_matrix.f1_score
-                            ),
+                            action: if is_en() {
+                                format!(
+                                    "Optimal threshold = {:.3} (Accuracy {:.1}%, F1 = {:.3}).",
+                                    lr.confusion_matrix.threshold,
+                                    lr.confusion_matrix.accuracy * 100.0,
+                                    lr.confusion_matrix.f1_score
+                                )
+                            } else {
+                                format!(
+                                    "Optimal grense = {:.3} (Nøyaktighet {:.1}%, F1 = {:.3}).",
+                                    lr.confusion_matrix.threshold,
+                                    lr.confusion_matrix.accuracy * 100.0,
+                                    lr.confusion_matrix.f1_score
+                                )
+                            },
                         });
                         logistic_regression = Some(lr);
                     }
@@ -945,7 +1155,13 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
             }
         }
     } else {
-        notes.push("Ingen binær utfallskolonne funnet automatisk for logistisk regresjon (Hosmer-Lemeshow / ROC) — kan kjøres manuelt.".to_string());
+        notes.push(
+            tr(
+                "Ingen binær utfallskolonne funnet automatisk for logistisk regresjon (Hosmer-Lemeshow / ROC) — kan kjøres manuelt.",
+                "No binary outcome column detected automatically for logistic regression (Hosmer-Lemeshow / ROC) — can be run manually.",
+            )
+            .to_string(),
+        );
     }
 
     // 9. Clustering (Silhouette + Elbow)
@@ -979,13 +1195,20 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     ),
                 });
                 summary_badges.push(SummaryBadge {
-                    check_name: "Klyngeanalyse (Silhouette / Elbow)".to_string(),
-                    category: "Modellkvalitet".to_string(),
+                    check_name: tr("Klyngeanalyse (Silhouette / Elbow)", "Cluster Analysis (Silhouette / Elbow)").to_string(),
+                    category: tr("Modellkvalitet", "Model Quality").to_string(),
                     status: cl.status.clone(),
-                    headline: format!(
-                        "Beste Silhouette = {:.3} (k={}) | Elbow k={}",
-                        cl.best_silhouette, cl.best_k_silhouette, cl.elbow_k
-                    ),
+                    headline: if is_en() {
+                        format!(
+                            "Best Silhouette = {:.3} (k={}) | Elbow k={}",
+                            cl.best_silhouette, cl.best_k_silhouette, cl.elbow_k
+                        )
+                    } else {
+                        format!(
+                            "Beste Silhouette = {:.3} (k={}) | Elbow k={}",
+                            cl.best_silhouette, cl.best_k_silhouette, cl.elbow_k
+                        )
+                    },
                     action: cl.recommendation.clone(),
                 });
                 clustering = Some(cl);

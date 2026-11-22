@@ -4,6 +4,7 @@ pub mod views;
 
 use crate::auto::{run_automatic_analysis, AutoAnalysisReport};
 use crate::data::Dataset;
+use crate::i18n::{current_lang, is_en, set_lang, tr, Lang};
 use crate::report::{
     build_zip_bundle_with_appendix, render_markdown_report_with_appendix,
     render_pdf_report_with_appendix,
@@ -25,80 +26,111 @@ use std::path::Path;
 pub struct ExampleDataset {
     pub id: &'static str,
     pub filename: &'static str,
-    pub title: &'static str,
-    pub focus: &'static str,
+    pub title_no: &'static str,
+    pub title_en: &'static str,
+    pub focus_no: &'static str,
+    pub focus_en: &'static str,
     pub csv: &'static str,
+}
+
+impl ExampleDataset {
+    pub fn title(&self) -> &'static str {
+        tr(self.title_no, self.title_en)
+    }
+    pub fn focus(&self) -> &'static str {
+        tr(self.focus_no, self.focus_en)
+    }
 }
 
 pub const EXAMPLE_DATASETS: &[ExampleDataset] = &[
     ExampleDataset {
         id: "ex1",
         filename: "01_komplett_studie.csv",
-        title: "1. Komplett helsestudie",
-        focus: "Alle tester samlet: grupper, kollinearitet, heteroskedastisitet, uteligger, repeterte målinger, manglende, logistisk, Cox og klynger",
+        title_no: "1. Komplett helsestudie",
+        title_en: "1. Comprehensive Health Study",
+        focus_no: "Alle tester samlet: grupper, kollinearitet, heteroskedastisitet, uteligger, repeterte målinger, manglende, logistisk, Cox og klynger",
+        focus_en: "All tests combined: groups, collinearity, heteroscedasticity, outliers, repeated measures, missing data, logistic, Cox & clustering",
         csv: include_str!("../../examples/01_komplett_studie.csv"),
     },
     ExampleDataset {
         id: "ex2",
         filename: "02_normalfordeling_sma_utvalg.csv",
-        title: "2. Normalfordeling & små utvalg (n=36)",
-        focus: "Shapiro-Wilk (< 50), Q-Q-plott, høyreskjev ventetid, Mann-Whitney U og Bootstrapping",
+        title_no: "2. Normalfordeling & små utvalg (n=36)",
+        title_en: "2. Normality & Small Samples (n=36)",
+        focus_no: "Shapiro-Wilk (< 50), Q-Q-plott, høyreskjev ventetid, Mann-Whitney U og Bootstrapping",
+        focus_en: "Shapiro-Wilk (< 50), Q-Q plot, right-skewed wait time, Mann-Whitney U & Bootstrapping",
         csv: include_str!("../../examples/02_normalfordeling_sma_utvalg.csv"),
     },
     ExampleDataset {
         id: "ex3",
         filename: "03_varians_grupper_welch.csv",
-        title: "3. Ulik varians i grupper",
-        focus: "Levenes test, Bartletts test, boksplott, Welchs ANOVA og Kruskal-Wallis på 3 behandlingsgrupper",
+        title_no: "3. Ulik varians i grupper",
+        title_en: "3. Unequal Group Variances",
+        focus_no: "Levenes test, Bartletts test, boksplott, Welchs ANOVA og Kruskal-Wallis på 3 behandlingsgrupper",
+        focus_en: "Levene's test, Bartlett's test, boxplot, Welch's ANOVA & Kruskal-Wallis across 3 treatment groups",
         csv: include_str!("../../examples/03_varians_grupper_welch.csv"),
     },
     ExampleDataset {
         id: "ex4",
         filename: "04_repeterte_maalinger_sfaerisitet.csv",
-        title: "4. Repeterte målinger (Sfærisitet)",
-        focus: "Mauchlys test, RM-ANOVA med Greenhouse-Geisser- og Huynh-Feldt-korreksjon over 4 målinger",
+        title_no: "4. Repeterte målinger (Sfærisitet)",
+        title_en: "4. Repeated Measures (Sphericity)",
+        focus_no: "Mauchlys test, RM-ANOVA med Greenhouse-Geisser- og Huynh-Feldt-korreksjon over 4 målinger",
+        focus_en: "Mauchly's test, RM-ANOVA with Greenhouse-Geisser & Huynh-Feldt corrections across 4 time points",
         csv: include_str!("../../examples/04_repeterte_maalinger_sfaerisitet.csv"),
     },
     ExampleDataset {
         id: "ex5",
         filename: "05_boligpriser_multikollinearitet.csv",
-        title: "5. Boligpriser (Multikollinearitet & Uteliggere)",
-        focus: "Høy VIF, korrelasjonsmatrise, Ridge/Lasso, Cook's Distance, sensitivitetsanalyse og AIC/BIC",
+        title_no: "5. Boligpriser (Multikollinearitet & Uteliggere)",
+        title_en: "5. Housing Prices (Multicollinearity & Outliers)",
+        focus_no: "Høy VIF, korrelasjonsmatrise, Ridge/Lasso, Cook's Distance, sensitivitetsanalyse og AIC/BIC",
+        focus_en: "High VIF, correlation matrix, Ridge/Lasso, Cook's Distance, sensitivity analysis & AIC/BIC",
         csv: include_str!("../../examples/05_boligpriser_multikollinearitet.csv"),
     },
     ExampleDataset {
         id: "ex6",
         filename: "06_tidsserie_autokorrelasjon.csv",
-        title: "6. Tidsserie (Autokorrelasjon)",
-        focus: "Sterk AR(1) autokorrelasjon: Durbin-Watson, Breusch-Godfrey, ACF-plott og Newey-West HAC",
+        title_no: "6. Tidsserie (Autokorrelasjon)",
+        title_en: "6. Time Series (Autocorrelation)",
+        focus_no: "Sterk AR(1) autokorrelasjon: Durbin-Watson, Breusch-Godfrey, ACF-plott og Newey-West HAC",
+        focus_en: "Strong AR(1) autocorrelation: Durbin-Watson, Breusch-Godfrey, ACF plot & Newey-West HAC",
         csv: include_str!("../../examples/06_tidsserie_autokorrelasjon.csv"),
     },
     ExampleDataset {
         id: "ex7",
         filename: "07_inntekt_heteroskedastisitet.csv",
-        title: "7. Inntekt (Heteroskedastisitet)",
-        focus: "Breusch-Pagan, Whites test, residualplott, HC3 robuste standardfeil og Log(Y)-transformasjon",
+        title_no: "7. Inntekt (Heteroskedastisitet)",
+        title_en: "7. Income (Heteroscedasticity)",
+        focus_no: "Breusch-Pagan, Whites test, residualplott, HC3 robuste standardfeil og Log(Y)-transformasjon",
+        focus_en: "Breusch-Pagan, White's test, residual plot, HC3 robust standard errors & Log(Y) transformation",
         csv: include_str!("../../examples/07_inntekt_heteroskedastisitet.csv"),
     },
     ExampleDataset {
         id: "ex8",
         filename: "08_undersokelse_manglende_faktor.csv",
-        title: "8. Spørreundersøkelse (MCAR & Faktoranalyse)",
-        focus: "Systematiske manglende verdier (Littles MCAR, MICE/FIML) + 2 faktorer (KMO, Bartlett, Scree)",
+        title_no: "8. Spørreundersøkelse (MCAR & Faktoranalyse)",
+        title_en: "8. Survey Data (MCAR & Factor Analysis)",
+        focus_no: "Systematiske manglende verdier (Littles MCAR, MICE/FIML) + 2 faktorer (KMO, Bartlett, Scree)",
+        focus_en: "Systematic missing values (Little's MCAR, MICE/FIML) + 2 factors (KMO, Bartlett, Scree)",
         csv: include_str!("../../examples/08_undersokelse_manglende_faktor.csv"),
     },
     ExampleDataset {
         id: "ex9",
         filename: "09_kreditt_logistisk_roc.csv",
-        title: "9. Kredittrisiko (Logistisk & ROC/AUC)",
-        focus: "Logistisk regresjon, Hosmer-Lemeshow-tilpasning, kalibreringsplott, ROC-kurve og AUC",
+        title_no: "9. Kredittrisiko (Logistisk & ROC/AUC)",
+        title_en: "9. Credit Risk (Logistic & ROC/AUC)",
+        focus_no: "Logistisk regresjon, Hosmer-Lemeshow-tilpasning, kalibreringsplott, ROC-kurve og AUC",
+        focus_en: "Logistic regression, Hosmer-Lemeshow fit, calibration plot, ROC curve & AUC",
         csv: include_str!("../../examples/09_kreditt_logistisk_roc.csv"),
     },
     ExampleDataset {
         id: "ex10",
         filename: "10_klinisk_overlevelse_klynger.csv",
-        title: "10. Klinisk overlevelse & Pasientklynger",
-        focus: "Cox proporsjonal hasard, Schoenfeld-residualer, K-means++ Silhouette-skår og Elbow-metoden",
+        title_no: "10. Klinisk overlevelse & Pasientklynger",
+        title_en: "10. Clinical Survival & Patient Clusters",
+        focus_no: "Cox proporsjonal hasard, Schoenfeld-residualer, K-means++ Silhouette-skår og Elbow-metoden",
+        focus_en: "Cox proportional hazards, Schoenfeld residuals, K-means++ Silhouette score & Elbow method",
         csv: include_str!("../../examples/10_klinisk_overlevelse_klynger.csv"),
     },
 ];
@@ -128,6 +160,7 @@ pub struct StatApp {
     dataset: Option<Dataset>,
     report: Option<AutoAnalysisReport>,
     alpha: f64,
+    lang: Lang,
     nav: NavSection,
     view_state: ViewState,
     manual: ManualWorkbench,
@@ -141,11 +174,38 @@ impl StatApp {
             dataset: None,
             report: None,
             alpha: 0.05,
+            lang: current_lang(),
             nav: NavSection::Home,
             view_state: ViewState::default(),
             manual: ManualWorkbench::default(),
             status_toast: None,
         }
+    }
+
+    fn switch_language(&mut self, ctx: &Context, new_lang: Lang) {
+        if self.lang == new_lang {
+            return;
+        }
+        self.lang = new_lang;
+        set_lang(new_lang);
+        ctx.send_viewport_cmd(egui::ViewportCommand::Title(
+            tr(
+                "stat-analysis — Statistisk Diagnostikk & Modellkvalitet",
+                "stat-analysis — Statistical Diagnostics & Model Quality",
+            )
+            .to_string(),
+        ));
+        if let Some(ref ds) = self.dataset {
+            self.report = Some(run_automatic_analysis(ds, self.alpha));
+        }
+        self.status_toast = Some((
+            tr(
+                "Språk endret til Norsk (alle visninger og rapporter oppdatert).",
+                "Language switched to English (all views and reports updated).",
+            )
+            .to_string(),
+            false,
+        ));
     }
 
     fn load_csv_content(&mut self, filename: &str, content: &str) {
@@ -155,12 +215,21 @@ impl StatApp {
                 self.manual.sync_with_dataset(&ds);
                 self.view_state = ViewState::default();
                 self.status_toast = Some((
-                    format!(
-                        "Analyserte '{}' ({} rader × {} kolonner) automatisk.",
-                        filename,
-                        ds.row_count(),
-                        ds.headers.len()
-                    ),
+                    if is_en() {
+                        format!(
+                            "Analyzed '{}' ({} rows × {} columns) automatically.",
+                            filename,
+                            ds.row_count(),
+                            ds.headers.len()
+                        )
+                    } else {
+                        format!(
+                            "Analyserte '{}' ({} rader × {} kolonner) automatisk.",
+                            filename,
+                            ds.row_count(),
+                            ds.headers.len()
+                        )
+                    },
                     false,
                 ));
                 self.dataset = Some(ds);
@@ -168,7 +237,10 @@ impl StatApp {
                 self.nav = NavSection::Dashboard;
             }
             Err(e) => {
-                self.status_toast = Some((format!("Feil ved lesing av CSV: {}", e), true));
+                self.status_toast = Some((
+                    format!("{}: {}", tr("Feil ved lesing av CSV", "CSV parsing error"), e),
+                    true,
+                ));
             }
         }
     }
@@ -184,7 +256,10 @@ impl StatApp {
                 self.load_csv_content(fname, &decoded);
             }
             Err(e) => {
-                self.status_toast = Some((format!("Klarte ikke åpne fil: {}", e), true));
+                self.status_toast = Some((
+                    format!("{}: {}", tr("Klarte ikke åpne fil", "Could not open file"), e),
+                    true,
+                ));
             }
         }
     }
@@ -192,22 +267,29 @@ impl StatApp {
     fn reanalyze_with_alpha(&mut self) {
         if let Some(ref ds) = self.dataset {
             self.report = Some(run_automatic_analysis(ds, self.alpha));
-            self.status_toast = Some((format!("Oppdaterte alle tester med α = {:.2}", self.alpha), false));
+            self.status_toast = Some((
+                if is_en() {
+                    format!("Updated all tests with α = {:.2}", self.alpha)
+                } else {
+                    format!("Oppdaterte alle tester med α = {:.2}", self.alpha)
+                },
+                false,
+            ));
         }
     }
 
     fn export_zip(&mut self) {
         let Some(ref rep) = self.report else { return };
         if let Some(path) = rfd::FileDialog::new()
-            .set_file_name("stat_analysis_rapport_og_figurer.zip")
-            .add_filter("ZIP-arkiv", &["zip"])
+            .set_file_name(tr("stat_analysis_rapport_og_figurer.zip", "stat_analysis_report_and_charts.zip"))
+            .add_filter(tr("ZIP-arkiv", "ZIP archive"), &["zip"])
             .save_file()
         {
             match build_zip_bundle_with_appendix(rep, &self.manual.history)
                 .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()))
             {
-                Ok(_) => self.status_toast = Some((format!("Lagret ZIP-pakke til {}", path.display()), false)),
-                Err(e) => self.status_toast = Some((format!("Eksportfeil: {}", e), true)),
+                Ok(_) => self.status_toast = Some((format!("{} {}", tr("Lagret ZIP-pakke til", "Saved ZIP bundle to"), path.display()), false)),
+                Err(e) => self.status_toast = Some((format!("{}: {}", tr("Eksportfeil", "Export error"), e), true)),
             }
         }
     }
@@ -215,13 +297,13 @@ impl StatApp {
     fn export_markdown(&mut self) {
         let Some(ref rep) = self.report else { return };
         if let Some(path) = rfd::FileDialog::new()
-            .set_file_name("stat_analysis_rapport.md")
+            .set_file_name(tr("stat_analysis_rapport.md", "stat_analysis_report.md"))
             .add_filter("Markdown", &["md"])
             .save_file()
         {
             match std::fs::write(&path, render_markdown_report_with_appendix(rep, &self.manual.history)) {
-                Ok(_) => self.status_toast = Some((format!("Lagret Markdown-rapport til {}", path.display()), false)),
-                Err(e) => self.status_toast = Some((format!("Eksportfeil: {}", e), true)),
+                Ok(_) => self.status_toast = Some((format!("{} {}", tr("Lagret Markdown-rapport til", "Saved Markdown report to"), path.display()), false)),
+                Err(e) => self.status_toast = Some((format!("{}: {}", tr("Eksportfeil", "Export error"), e), true)),
             }
         }
     }
@@ -229,21 +311,25 @@ impl StatApp {
     fn export_pdf(&mut self) {
         let Some(ref rep) = self.report else { return };
         if let Some(path) = rfd::FileDialog::new()
-            .set_file_name("stat_analysis_rapport.pdf")
-            .add_filter("PDF-dokument", &["pdf"])
+            .set_file_name(tr("stat_analysis_rapport.pdf", "stat_analysis_report.pdf"))
+            .add_filter(tr("PDF-dokument", "PDF document"), &["pdf"])
             .save_file()
         {
             let n_app = self.manual.history.len();
             match std::fs::write(&path, render_pdf_report_with_appendix(rep, &self.manual.history)) {
                 Ok(_) => {
                     let msg = if n_app > 0 {
-                        format!("Lagret PDF-rapport (inkl. {} manuelle utregninger i Appendiks) til {}", n_app, path.display())
+                        if is_en() {
+                            format!("Saved PDF report (incl. {} manual calculations in Appendix) to {}", n_app, path.display())
+                        } else {
+                            format!("Lagret PDF-rapport (inkl. {} manuelle utregninger i Appendiks) til {}", n_app, path.display())
+                        }
                     } else {
-                        format!("Lagret PDF-rapport til {}", path.display())
+                        format!("{} {}", tr("Lagret PDF-rapport til", "Saved PDF report to"), path.display())
                     };
                     self.status_toast = Some((msg, false));
                 }
-                Err(e) => self.status_toast = Some((format!("Eksportfeil: {}", e), true)),
+                Err(e) => self.status_toast = Some((format!("{}: {}", tr("Eksportfeil", "Export error"), e), true)),
             }
         }
     }
@@ -251,7 +337,7 @@ impl StatApp {
     fn export_json(&mut self) {
         let Some(ref rep) = self.report else { return };
         if let Some(path) = rfd::FileDialog::new()
-            .set_file_name("stat_analysis_resultater.json")
+            .set_file_name(tr("stat_analysis_resultater.json", "stat_analysis_results.json"))
             .add_filter("JSON", &["json"])
             .save_file()
         {
@@ -259,8 +345,8 @@ impl StatApp {
                 .map_err(|e| e.to_string())
                 .and_then(|s| std::fs::write(&path, s).map_err(|e| e.to_string()))
             {
-                Ok(_) => self.status_toast = Some((format!("Lagret JSON til {}", path.display()), false)),
-                Err(e) => self.status_toast = Some((format!("Eksportfeil: {}", e), true)),
+                Ok(_) => self.status_toast = Some((format!("{} {}", tr("Lagret JSON til", "Saved JSON to"), path.display()), false)),
+                Err(e) => self.status_toast = Some((format!("{}: {}", tr("Eksportfeil", "Export error"), e), true)),
             }
         }
     }
@@ -428,7 +514,7 @@ impl eframe::App for StatApp {
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     if home_icon_button(ui, self.nav == NavSection::Home)
-                        .on_hover_text("Tilbake til startsiden")
+                        .on_hover_text(tr("Tilbake til startsiden", "Back to Home"))
                         .clicked()
                     {
                         self.nav = NavSection::Home;
@@ -442,16 +528,16 @@ impl eframe::App for StatApp {
                             )
                             .sense(egui::Sense::click()),
                         )
-                        .on_hover_text("Tilbake til startsiden")
+                        .on_hover_text(tr("Tilbake til startsiden", "Back to Home"))
                         .clicked()
                     {
                         self.nav = NavSection::Home;
                     }
                     ui.separator();
 
-                    if primary_button(ui, "Åpne CSV-fil...").clicked() {
+                    if primary_button(ui, tr("Åpne CSV-fil...", "Open CSV File...")).clicked() {
                         if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("CSV-filer", &["csv", "txt"])
+                            .add_filter(tr("CSV-filer", "CSV files"), &["csv", "txt"])
                             .pick_file()
                         {
                             self.load_csv_path(&path);
@@ -459,11 +545,11 @@ impl eframe::App for StatApp {
                     }
 
                     ui.menu_button(
-                        RichText::new("Eksempelsett (10) ▾").strong().color(TEXT_PRIMARY),
+                        RichText::new(tr("Eksempelsett (10) ▾", "Example Datasets (10) ▾")).strong().color(TEXT_PRIMARY),
                         |ui| {
                             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                             for ex in EXAMPLE_DATASETS {
-                                if ui.button(ex.title).on_hover_text(ex.focus).clicked() {
+                                if ui.button(ex.title()).on_hover_text(ex.focus()).clicked() {
                                     ui.close_menu();
                                     self.load_csv_content(ex.filename, ex.csv);
                                 }
@@ -472,7 +558,7 @@ impl eframe::App for StatApp {
                     );
 
                     ui.separator();
-                    ui.label(RichText::new("Signifikansnivå α:").color(TEXT_PRIMARY).strong());
+                    ui.label(RichText::new(tr("Signifikansnivå α:", "Significance α:")).color(TEXT_PRIMARY).strong());
                     let prev_alpha = self.alpha;
                     egui::ComboBox::from_id_salt("alpha_combo")
                         .width(66.0)
@@ -488,46 +574,88 @@ impl eframe::App for StatApp {
 
                     if self.report.is_some() {
                         ui.separator();
-                        if secondary_button(ui, "Kjør alle tester").on_hover_text("Kjør hele den automatiske testpakken på nytt med gjeldende α").clicked() {
+                        if secondary_button(ui, tr("Kjør alle tester", "Run All Tests"))
+                            .on_hover_text(tr(
+                                "Kjør hele den automatiske testpakken på nytt med gjeldende α",
+                                "Re-run the entire automatic diagnostic & analysis suite with current α",
+                            ))
+                            .clicked()
+                        {
                             if let Some(ref ds) = self.dataset {
                                 let new_rep = run_automatic_analysis(ds, self.alpha);
-                                let msg = format!(
-                                    "Kjørte alle {} forutsetningssjekker og {} hovedanalyser på nytt (α = {:.2}).",
-                                    new_rep.summary_badges.len(),
-                                    new_rep.recommended_analyses.len(),
-                                    self.alpha
-                                );
+                                let msg = if is_en() {
+                                    format!(
+                                        "Re-ran all {} assumption checks and {} main analyses (α = {:.2}).",
+                                        new_rep.summary_badges.len(),
+                                        new_rep.recommended_analyses.len(),
+                                        self.alpha
+                                    )
+                                } else {
+                                    format!(
+                                        "Kjørte alle {} forutsetningssjekker og {} hovedanalyser på nytt (α = {:.2}).",
+                                        new_rep.summary_badges.len(),
+                                        new_rep.recommended_analyses.len(),
+                                        self.alpha
+                                    )
+                                };
                                 self.report = Some(new_rep);
                                 self.status_toast = Some((msg, false));
                             }
                         }
                         let app_suffix = if self.manual.history.is_empty() {
                             String::new()
+                        } else if is_en() {
+                            format!(" — incl. {} in Appendix", self.manual.history.len())
                         } else {
                             format!(" — inkl. {} i Appendiks", self.manual.history.len())
                         };
                         ui.menu_button(
-                            RichText::new("Eksporter rapport / SVG ▾").strong().color(TEXT_PRIMARY),
+                            RichText::new(tr("Eksporter rapport / SVG ▾", "Export Report / SVG ▾")).strong().color(TEXT_PRIMARY),
                             |ui| {
                                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                                if ui.button(format!("Lagre PDF-rapport (.pdf{})...", app_suffix)).clicked() {
+                                if ui.button(format!("{}{})...", tr("Lagre PDF-rapport (.pdf", "Save PDF Report (.pdf"), app_suffix)).clicked() {
                                     ui.close_menu();
                                     self.export_pdf();
                                 }
-                                if ui.button(format!("Lagre alt som ZIP (PDF{} + alle SVG-figurer)...", app_suffix)).clicked() {
+                                if ui.button(format!("{}{}{}...", tr("Lagre alt som ZIP (PDF", "Save All as ZIP (PDF"), app_suffix, tr(" + alle SVG-figurer)", " + all SVG charts)"))).clicked() {
                                     ui.close_menu();
                                     self.export_zip();
                                 }
-                                if ui.button("Lagre Markdown-rapport (.md)...").clicked() {
+                                if ui.button(tr("Lagre Markdown-rapport (.md)...", "Save Markdown Report (.md)...")).clicked() {
                                     ui.close_menu();
                                     self.export_markdown();
                                 }
-                                if ui.button("Lagre rådata / resultater (.json)...").clicked() {
+                                if ui.button(tr("Lagre rådata / resultater (.json)...", "Save Raw Results (.json)...")).clicked() {
                                     ui.close_menu();
                                     self.export_json();
                                 }
                             },
                         );
+                    }
+
+                    ui.separator();
+                    let mut chosen_lang: Option<Lang> = None;
+                    let lang_btn_lbl = format!(
+                        "{}: {} ▾",
+                        tr("Språk", "Language"),
+                        self.lang.native_name()
+                    );
+                    ui.menu_button(
+                        RichText::new(lang_btn_lbl).strong().color(TEXT_PRIMARY),
+                        |ui| {
+                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                            if ui.selectable_label(self.lang == Lang::No, "Norsk (NO)").clicked() {
+                                ui.close_menu();
+                                chosen_lang = Some(Lang::No);
+                            }
+                            if ui.selectable_label(self.lang == Lang::En, "English (EN)").clicked() {
+                                ui.close_menu();
+                                chosen_lang = Some(Lang::En);
+                            }
+                        },
+                    );
+                    if let Some(nl) = chosen_lang {
+                        self.switch_language(ctx, nl);
                     }
                 });
             });
@@ -581,30 +709,30 @@ impl eframe::App for StatApp {
                 )
                 .show(ctx, |ui| {
                     egui::ScrollArea::vertical().show(ui, |ui| {
-                        self.nav_button(ui, NavSection::Dashboard, "Oversikt (Dashboard)");
+                        self.nav_button(ui, NavSection::Dashboard, tr("Oversikt (Dashboard)", "Overview (Dashboard)"));
                         ui.add_space(10.0);
-                        ui.label(RichText::new("FORUTSETNINGER").size(10.5).strong().color(TEXT_SECONDARY));
-                        self.nav_button(ui, NavSection::Normality, "1. Normalfordeling");
-                        self.nav_button(ui, NavSection::Variance, "2. Varianshomogenitet");
-                        self.nav_button(ui, NavSection::Sphericity, "3. Sfærisitet");
-                        self.nav_button(ui, NavSection::Multicollinearity, "4. Multikollinearitet");
-                        self.nav_button(ui, NavSection::Autocorrelation, "5. Autokorrelasjon");
-                        self.nav_button(ui, NavSection::Heteroscedasticity, "6. Heteroskedastisitet");
-                        self.nav_button(ui, NavSection::Outliers, "7. Uteliggere & innflytelse");
-                        self.nav_button(ui, NavSection::MissingData, "8. Manglende data (MCAR)");
-                        self.nav_button(ui, NavSection::FactorSuitability, "9. Faktoranalyse (KMO)");
+                        ui.label(RichText::new(tr("FORUTSETNINGER", "ASSUMPTIONS")).size(10.5).strong().color(TEXT_SECONDARY));
+                        self.nav_button(ui, NavSection::Normality, tr("1. Normalfordeling", "1. Normality"));
+                        self.nav_button(ui, NavSection::Variance, tr("2. Varianshomogenitet", "2. Variance Homogeneity"));
+                        self.nav_button(ui, NavSection::Sphericity, tr("3. Sfærisitet", "3. Sphericity"));
+                        self.nav_button(ui, NavSection::Multicollinearity, tr("4. Multikollinearitet", "4. Multicollinearity"));
+                        self.nav_button(ui, NavSection::Autocorrelation, tr("5. Autokorrelasjon", "5. Autocorrelation"));
+                        self.nav_button(ui, NavSection::Heteroscedasticity, tr("6. Heteroskedastisitet", "6. Heteroscedasticity"));
+                        self.nav_button(ui, NavSection::Outliers, tr("7. Uteliggere & innflytelse", "7. Outliers & Influence"));
+                        self.nav_button(ui, NavSection::MissingData, tr("8. Manglende data (MCAR)", "8. Missing Data (MCAR)"));
+                        self.nav_button(ui, NavSection::FactorSuitability, tr("9. Faktoranalyse (KMO)", "9. Factor Suitability (KMO)"));
 
                         ui.add_space(10.0);
-                        ui.label(RichText::new("MODELLKVALITET").size(10.5).strong().color(TEXT_SECONDARY));
-                        self.nav_button(ui, NavSection::LinearRegression, "10. Lineær regresjon & AIC");
-                        self.nav_button(ui, NavSection::LogisticRegression, "11. Logistisk (HL / ROC)");
-                        self.nav_button(ui, NavSection::Survival, "12. Overlevelse (Cox PH)");
-                        self.nav_button(ui, NavSection::Clustering, "13. Klyngeanalyse");
+                        ui.label(RichText::new(tr("MODELLKVALITET", "MODEL QUALITY")).size(10.5).strong().color(TEXT_SECONDARY));
+                        self.nav_button(ui, NavSection::LinearRegression, tr("10. Lineær regresjon & AIC", "10. Linear Regression & AIC"));
+                        self.nav_button(ui, NavSection::LogisticRegression, tr("11. Logistisk (HL / ROC)", "11. Logistic (HL / ROC)"));
+                        self.nav_button(ui, NavSection::Survival, tr("12. Overlevelse (Cox PH)", "12. Survival (Cox PH)"));
+                        self.nav_button(ui, NavSection::Clustering, tr("13. Klyngeanalyse", "13. Cluster Analysis"));
 
                         ui.add_space(10.0);
-                        ui.label(RichText::new("VERKTØY").size(10.5).strong().color(TEXT_SECONDARY));
-                        self.nav_button(ui, NavSection::ManualWorkbench, "Manuell testbenk");
-                        self.nav_button(ui, NavSection::DataExplorer, "Datautforsker");
+                        ui.label(RichText::new(tr("VERKTØY", "TOOLS")).size(10.5).strong().color(TEXT_SECONDARY));
+                        self.nav_button(ui, NavSection::ManualWorkbench, tr("Manuell testbenk", "Manual Workbench"));
+                        self.nav_button(ui, NavSection::DataExplorer, tr("Datautforsker", "Data Explorer"));
                     });
                 });
         }
@@ -668,7 +796,10 @@ impl eframe::App for StatApp {
             painter.text(
                 screen.center(),
                 egui::Align2::CENTER_CENTER,
-                "Slipp CSV-filen her for automatisk statistisk analyse",
+                tr(
+                    "Slipp CSV-filen her for automatisk statistisk analyse",
+                    "Drop CSV file here for automatic statistical analysis",
+                ),
                 FontId::proportional(24.0),
                 Color32::WHITE,
             );
@@ -741,7 +872,10 @@ impl StatApp {
             );
             ui.add_space(4.0);
             ui.label(
-                RichText::new("Automatisk og manuell statistisk forutsetningssjekk, modellkvalitet og interaktiv visualisering i ren Rust")
+                RichText::new(tr(
+                    "Automatisk og manuell statistisk forutsetningssjekk, modellkvalitet og interaktiv visualisering i ren Rust",
+                    "Automatic and manual statistical assumption checks, model quality diagnostics & interactive visualization in pure Rust",
+                ))
                     .size(14.5)
                     .color(TEXT_SECONDARY),
             );
@@ -751,17 +885,31 @@ impl StatApp {
         show_card(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(12.0);
-                ui.label(RichText::new("Dra og slipp en .csv-fil inn i dette vinduet").size(17.0).strong().color(TEXT_PRIMARY));
-                ui.label(RichText::new("eller velg fil fra datamaskinen — alle tester og figurer beregnes automatisk").color(TEXT_SECONDARY));
+                ui.label(
+                    RichText::new(tr(
+                        "Dra og slipp en .csv-fil inn i dette vinduet",
+                        "Drag and drop a .csv file into this window",
+                    ))
+                    .size(17.0)
+                    .strong()
+                    .color(TEXT_PRIMARY),
+                );
+                ui.label(
+                    RichText::new(tr(
+                        "eller velg fil fra datamaskinen — alle tester og figurer beregnes automatisk",
+                        "or pick a file from your computer — all tests and charts are computed automatically",
+                    ))
+                    .color(TEXT_SECONDARY),
+                );
                 ui.add_space(14.0);
                 ui.horizontal_wrapped(|ui| {
                     if self.dataset.is_some() {
-                        if primary_button(ui, "   Tilbake til datasett →   ").clicked() {
+                        if primary_button(ui, tr("   Tilbake til datasett →   ", "   Back to Dataset →   ")).clicked() {
                             self.nav = NavSection::Dashboard;
                         }
-                    } else if primary_button(ui, "   Åpne egen CSV-fil...   ").clicked() {
+                    } else if primary_button(ui, tr("   Åpne egen CSV-fil...   ", "   Open CSV File...   ")).clicked() {
                         if let Some(path) = rfd::FileDialog::new()
-                            .add_filter("CSV-filer", &["csv", "txt"])
+                            .add_filter(tr("CSV-filer", "CSV files"), &["csv", "txt"])
                             .pick_file()
                         {
                             self.load_csv_path(&path);
@@ -805,12 +953,18 @@ impl StatApp {
         let mut chosen_example: Option<usize> = None;
         show_card(ui, |ui| {
             ui.label(
-                RichText::new("Standard datasett (10 innebygde eksempelsett)")
+                RichText::new(tr(
+                    "Standard datasett (10 innebygde eksempelsett)",
+                    "Standard Datasets (10 Built-in Examples)",
+                ))
                     .font(heading_bold.clone())
                     .color(TEXT_PRIMARY),
             );
             ui.label(
-                RichText::new("Velg et datasett under for å utforske ulike forutsetningssjekker, tiltak og modelltester umiddelbart:")
+                RichText::new(tr(
+                    "Velg et datasett under for å utforske ulike forutsetningssjekker, tiltak og modelltester umiddelbart:",
+                    "Select a dataset below to immediately explore assumption checks, remedies, and model diagnostics:",
+                ))
                     .size(12.8)
                     .color(TEXT_SECONDARY),
             );
@@ -845,7 +999,7 @@ impl StatApp {
 
                                         let mut job = egui::text::LayoutJob::default();
                                         job.append(
-                                            &format!("{}:", ex.title),
+                                            &format!("{}:", ex.title()),
                                             0.0,
                                             egui::TextFormat {
                                                 font_id: bold_font.clone(),
@@ -854,7 +1008,7 @@ impl StatApp {
                                             },
                                         );
                                         job.append(
-                                            &format!(" {}", ex.focus),
+                                            &format!(" {}", ex.focus()),
                                             0.0,
                                             egui::TextFormat {
                                                 font_id: FontId::proportional(12.2),
@@ -867,7 +1021,7 @@ impl StatApp {
                                         if ui
                                             .add(
                                                 egui::Button::new(
-                                                    RichText::new("Last inn sett →")
+                                                    RichText::new(tr("Last inn sett →", "Load Dataset →"))
                                                         .color(PRIMARY_BLUE)
                                                         .strong(),
                                                 )
@@ -899,36 +1053,72 @@ impl StatApp {
             ui,
             |ui| {
                 show_card(ui, |ui| {
-                    ui.label(RichText::new("Forutsetningssjekker og tiltak").font(heading_bold.clone()).color(TEXT_PRIMARY));
+                    ui.label(
+                        RichText::new(tr("Forutsetningssjekker og tiltak", "Assumption Checks & Remedies"))
+                            .font(heading_bold.clone())
+                            .color(TEXT_PRIMARY),
+                    );
                     ui.add_space(8.0);
-                    for (label, desc) in [
-                        ("Normalfordeling", "Shapiro-Wilk (<50), KS/Lilliefors (>=50), Q-Q, Histogram, Mann-Whitney, Kruskal-Wallis, Bootstrap"),
-                        ("Varianshomogenitet", "Levene, Bartlett, Boksplott, Welchs t-test / ANOVA"),
-                        ("Sfærisitet", "Mauchlys test, Greenhouse-Geisser & Huynh-Feldt (RM-ANOVA)"),
-                        ("Multikollinearitet", "VIF, Korrelasjonsmatrise, Ridge & Lasso"),
-                        ("Autokorrelasjon", "Durbin-Watson, Breusch-Godfrey, ACF, Newey-West HAC, AR(1)"),
-                        ("Heteroskedastisitet", "Breusch-Pagan, White, Residualplott, HC3 & Log(Y)"),
-                        ("Uteliggere", "Cook's distance, Mahalanobis, Leverage-plott, Sensitivitetsanalyse"),
-                        ("Manglende data", "Littles MCAR-test, Mønsteranalyse, MICE & FIML"),
-                        ("Faktoranalyse", "KMO, MSA, Bartletts sfærisitetstest & PCA Scree-plott"),
-                    ] {
+                    let bullets: &[(&str, &str)] = if is_en() {
+                        &[
+                            ("Normality", "Shapiro-Wilk (<50), KS/Lilliefors (>=50), Q-Q, Histogram, Mann-Whitney, Kruskal-Wallis, Bootstrap"),
+                            ("Variance Homogeneity", "Levene, Bartlett, Boxplot, Student & Welch t-test / ANOVA"),
+                            ("Sphericity", "Mauchly's test, Greenhouse-Geisser & Huynh-Feldt (RM-ANOVA)"),
+                            ("Multicollinearity", "VIF, Correlation Matrix, Ridge & Lasso"),
+                            ("Autocorrelation", "Durbin-Watson, Breusch-Godfrey, ACF, Newey-West HAC, AR(1)"),
+                            ("Heteroscedasticity", "Breusch-Pagan, White, Residual plot, HC3 & Log(Y)"),
+                            ("Outliers", "Cook's distance, Mahalanobis, Leverage plot, Sensitivity analysis"),
+                            ("Missing Data", "Little's MCAR test, Pattern analysis, MICE & FIML"),
+                            ("Factor Analysis", "KMO, MSA, Bartlett's test of sphericity & PCA Scree plot"),
+                        ]
+                    } else {
+                        &[
+                            ("Normalfordeling", "Shapiro-Wilk (<50), KS/Lilliefors (>=50), Q-Q, Histogram, Mann-Whitney, Kruskal-Wallis, Bootstrap"),
+                            ("Varianshomogenitet", "Levene, Bartlett, Boksplott, Student & Welchs t-test / ANOVA"),
+                            ("Sfærisitet", "Mauchlys test, Greenhouse-Geisser & Huynh-Feldt (RM-ANOVA)"),
+                            ("Multikollinearitet", "VIF, Korrelasjonsmatrise, Ridge & Lasso"),
+                            ("Autokorrelasjon", "Durbin-Watson, Breusch-Godfrey, ACF, Newey-West HAC, AR(1)"),
+                            ("Heteroskedastisitet", "Breusch-Pagan, White, Residualplott, HC3 & Log(Y)"),
+                            ("Uteliggere", "Cook's distance, Mahalanobis, Leverage-plott, Sensitivitetsanalyse"),
+                            ("Manglende data", "Littles MCAR-test, Mønsteranalyse, MICE & FIML"),
+                            ("Faktoranalyse", "KMO, MSA, Bartletts sfærisitetstest & PCA Scree-plott"),
+                        ]
+                    };
+                    for &(label, desc) in bullets {
                         render_bullet(ui, label, desc);
                     }
                 });
             },
             |ui| {
                 show_card(ui, |ui| {
-                    ui.label(RichText::new("Modellkvalitet og eksport").font(heading_bold.clone()).color(TEXT_PRIMARY));
+                    ui.label(
+                        RichText::new(tr("Modellkvalitet og eksport", "Model Quality & Export"))
+                            .font(heading_bold.clone())
+                            .color(TEXT_PRIMARY),
+                    );
                     ui.add_space(8.0);
-                    for (label, desc) in [
-                        ("Lineær regresjon", "R², Justert R², RMSE, MAE, F-test og koeffisienter"),
-                        ("Logistisk regresjon", "Hosmer-Lemeshow-test, Kalibreringsplott, ROC-kurve & AUC"),
-                        ("Modellsammenligning", "AIC og BIC på tvers av kandidatmodeller"),
-                        ("Overlevelsesanalyse (Cox PH)", "Hazard Ratios, C-index & Schoenfeld-residualer"),
-                        ("Klyngeanalyse", "K-means++, Silhouette-skår, Elbow-metoden & 2D PCA-projeksjon"),
-                        ("Manuell testbenk", "Kjør hver enkelt test manuelt med egne kolonner og parametere"),
-                        ("Nedlasting / Eksport", "Lagre ekte PDF-rapport, enkeltvise SVG-figurer, Markdown, JSON eller komplett ZIP"),
-                    ] {
+                    let bullets: &[(&str, &str)] = if is_en() {
+                        &[
+                            ("Linear Regression", "R², Adjusted R², RMSE, MAE, F-test & coefficients"),
+                            ("Logistic Regression", "Hosmer-Lemeshow test, Calibration plot, ROC curve & AUC"),
+                            ("Model Comparison", "AIC and BIC across candidate models"),
+                            ("Survival Analysis (Cox PH)", "Hazard Ratios, C-index, Schoenfeld residuals & time-varying HR"),
+                            ("Cluster Analysis", "K-means++, Silhouette score, Elbow method, DBSCAN & 2D PCA"),
+                            ("Manual Workbench", "Run any individual test or all relevant tests into the PDF Appendix"),
+                            ("Download / Export", "Save genuine vector PDF report, SVG charts, Markdown, JSON or full ZIP"),
+                        ]
+                    } else {
+                        &[
+                            ("Lineær regresjon", "R², Justert R², RMSE, MAE, F-test og koeffisienter"),
+                            ("Logistisk regresjon", "Hosmer-Lemeshow-test, Kalibreringsplott, ROC-kurve & AUC"),
+                            ("Modellsammenligning", "AIC og BIC på tvers av kandidatmodeller"),
+                            ("Overlevelsesanalyse (Cox PH)", "Hazard Ratios, C-index, Schoenfeld-residualer & tidsavhengig HR"),
+                            ("Klyngeanalyse", "K-means++, Silhouette-skår, Elbow-metoden, DBSCAN & 2D PCA"),
+                            ("Manuell testbenk", "Kjør enkeltvise tester eller alle relevante tester til PDF-appendikset"),
+                            ("Nedlasting / Eksport", "Lagre ekte PDF-rapport, enkeltvise SVG-figurer, Markdown, JSON eller komplett ZIP"),
+                        ]
+                    };
+                    for &(label, desc) in bullets {
                         render_bullet(ui, label, desc);
                     }
                 });

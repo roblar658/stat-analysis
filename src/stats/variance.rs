@@ -466,9 +466,21 @@ pub fn check_variance_homogeneity(
     .to_string();
 
     let interpretation = if levene_median.equal_variances {
+        if crate::i18n::is_en() {
+            format!(
+                "Homogeneity of variances appears satisfied (Brown-Forsythe Levene p = {:.4}, Bartlett p = {:.4}).",
+                levene_median.p_value, bartlett.p_value
+            )
+        } else {
+            format!(
+                "Varianshomogenitet ser ut til å være oppfylt (Brown-Forsythe Levene p = {:.4}, Bartlett p = {:.4}).",
+                levene_median.p_value, bartlett.p_value
+            )
+        }
+    } else if crate::i18n::is_en() {
         format!(
-            "Varianshomogenitet ser ut til å være oppfylt (Brown-Forsythe Levene p = {:.4}, Bartlett p = {:.4}).",
-            levene_median.p_value, bartlett.p_value
+            "Homogeneity of variances is violated (Levene median p = {:.4} < {:.2}, Bartlett p = {:.4}).",
+            levene_median.p_value, alpha, bartlett.p_value
         )
     } else {
         format!(
@@ -478,11 +490,23 @@ pub fn check_variance_homogeneity(
     };
 
     let recommendation = if levene_median.equal_variances {
-        "Standard uavhengig t-test eller vanlig enveis ANOVA kan brukes.".to_string()
+        crate::i18n::tr(
+            "Standard uavhengig t-test eller vanlig enveis ANOVA kan brukes.",
+            "Standard independent t-test or one-way ANOVA can be used.",
+        )
+        .to_string()
     } else if valid_groups.len() == 2 {
-        "Bruk Welchs t-test (beregnet under) i stedet for standard Student t-test.".to_string()
+        crate::i18n::tr(
+            "Bruk Welchs t-test (beregnet under) i stedet for standard Student t-test.",
+            "Use Welch's t-test (computed below) instead of Student's independent t-test.",
+        )
+        .to_string()
     } else {
-        "Bruk Welchs ANOVA (beregnet under) i stedet for standard ANOVA.".to_string()
+        crate::i18n::tr(
+            "Bruk Welchs ANOVA (beregnet under) i stedet for standard ANOVA.",
+            "Use Welch's ANOVA (computed below) instead of standard one-way ANOVA.",
+        )
+        .to_string()
     };
 
     Ok(VarianceHomogeneityReport {
