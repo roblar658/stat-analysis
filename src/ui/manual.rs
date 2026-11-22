@@ -1,3 +1,4 @@
+use crate::auto::AutoAnalysisReport;
 use crate::data::Dataset;
 use crate::plots::{
     svg_acf_plot, svg_boxplot, svg_calibration_plot, svg_clusters_2d, svg_corr_heatmap,
@@ -134,7 +135,7 @@ impl ManualWorkbench {
         self.history.clear();
     }
 
-    pub fn render(&mut self, ui: &mut Ui, ds: &Dataset, alpha: f64) {
+    pub fn render(&mut self, ui: &mut Ui, ds: &Dataset, rep: &AutoAnalysisReport, alpha: f64) {
         ui.label(RichText::new("Manuell testbenk — kjør alle tester med egne valg").size(22.0).strong().color(TEXT_PRIMARY));
         ui.label(RichText::new("Velg hvilken som helst statistisk test, angi eksakte kolonner og parametere, og eksporter interaktive grafer som SVG.").size(13.0).color(TEXT_SECONDARY));
         ui.add_space(10.0);
@@ -263,6 +264,12 @@ impl ManualWorkbench {
             ui.horizontal_wrapped(|ui| {
                 if primary_button(ui, "  Kjør valgt test  ").clicked() {
                     self.execute(ds, alpha);
+                }
+                if secondary_button(ui, "  Kjør alle relevante tester → Appendiks  ")
+                    .on_hover_text("Utfører automatisk alle relevante tester for dette datasettet og legger dem i PDF-appendikset")
+                    .clicked()
+                {
+                    self.execute_all_relevant(ds, rep, alpha);
                 }
                 if !self.history.is_empty() {
                     ui.add_space(8.0);
@@ -570,6 +577,143 @@ impl ManualWorkbench {
             ),
         }
     }
+
+    /// Execute EVERY relevant statistical test automatically on demand and log all results into the PDF Appendix.
+    pub fn execute_all_relevant(&mut self, ds: &Dataset, rep: &AutoAnalysisReport, alpha: f64) {
+        self.last_error = None;
+        let ts = chrono::Local::now().format("%H:%M:%S").to_string();
+        let mut added: Option<ManualResult> = None;
+
+        // 1. Normality + Bootstrap for first numeric column (or primary outcome)
+        if let Some(nc) = rep.normality_checks.first() {
+            if let Ok(vals) = ds.get_numeric_values(&nc.variable) {
+                let boot = bootstrap_mean(&nc.variable, &vals, self.bootstrap_n).ok();
+                let res = ManualResult::Normality {
+                    check: nc.clone(),
+                    boot,
+                    values: vals,
+                };
+                self.history.push(ManualHistoryEntry {
+                    timestamp: ts.clone(),
+                    title: format!("Normalfordeling ({})", nc.variable),
+                    parameters: format!("Variabel = {}, alpha = {:.2}, Bootstrap B = {}", nc.variable, alpha, self.bootstrap_n),
+                    result: res.clone(),
+                });
+                added = Some(res);
+            }
+        }
+
+        // 2. Group Variance + Student t-test / Welch / ANOVA / Mann-Whitney / Kruskal-Wallis
+        if let Some(ref vh) = rep.variance_homogeneity {
+            let groups: Vec<(String, Vec<f64>)> = ds
+                .get_grouped_values(&vh.value_col, &vh.group_col)
+                .map(|m| m.into_iter().filter(|(_, v)| v.len() >= 2).collect())
+                .unwrap_or_default();
+            let mw = rep.group_fallbacks.as_ref().and_then(|f| f.mann_whitney.clone());
+            let kw = rep.group_fallbacks.as_ref().and_then(|f| f.kruskal_wallis.clone());
+            let res = ManualResult::GroupVariance {
+                variance: vh.clone(),
+                mw,
+                kw,
+                groups,
+            };
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: format!("Varians & Gruppetester ({} per {})", vh.value_col, vh.group_col),
+                parameters: format!("Utfall = {}, Gruppe = {}, alpha = {:.2}", vh.value_col, vh.group_col, alpha),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        // 3. Sphericity (Mauchly / GG / HF)
+        if let Some(ref sp) = rep.sphericity {
+            let res = ManualResult::Sphericity(sp.clone());
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: "Sfærisitet (Repeated Measures ANOVA)".into(),
+                parameters: format!("Målinger = [{}], alpha = {:.2}", sp.columns.join(", "), alpha),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        // 4. Linear Regression + all diagnostics
+        if let Some(ref reg) = rep.linear_regression {
+            let res = ManualResult::Regression(reg.clone());
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: format!("Lineær regresjon ({})", reg.target),
+                parameters: format!("Y = {}, X = [{}], alpha = {:.2}", reg.target, reg.predictors.join(", "), alpha),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        // 5. Missing Data (Little's MCAR & MICE)
+        {
+            let res = ManualResult::Missing(rep.missing_data.clone());
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: "Manglende data (Littles MCAR & MICE)".into(),
+                parameters: format!("Alle kolonner, alpha = {:.2}, MICE m = {}", alpha, rep.missing_data.mice_imputations),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        // 6. Factor Suitability (KMO & Bartlett)
+        if let Some(ref fac) = rep.factor_suitability {
+            let res = ManualResult::Factor(fac.clone());
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: "Faktoranalyse-egnethet (KMO & Bartlett)".into(),
+                parameters: format!("Variabler = [{}], alpha = {:.2}", fac.variables.join(", "), alpha),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        // 7. Logistic Regression (Hosmer-Lemeshow & ROC/AUC)
+        if let Some(ref lr) = rep.logistic_regression {
+            let res = ManualResult::Logistic(lr.clone());
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: format!("Logistisk regresjon ({})", lr.target),
+                parameters: format!("Y = {}, X = [{}], alpha = {:.2}", lr.target, lr.predictors.join(", "), alpha),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        // 8. Cox Survival (PH & Schoenfeld)
+        if let Some(ref cox) = rep.cox_survival {
+            let res = ManualResult::Survival(cox.clone());
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: format!("Cox PH & Schoenfeld ({} / {})", cox.time_col, cox.event_col),
+                parameters: format!("Tid = {}, Hendelse = {}, X = [{}]", cox.time_col, cox.event_col, cox.predictors.join(", ")),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        // 9. Clustering (Silhouette, Elbow & DBSCAN)
+        if let Some(ref cl) = rep.clustering {
+            let res = ManualResult::Clustering(cl.clone());
+            self.history.push(ManualHistoryEntry {
+                timestamp: ts.clone(),
+                title: "Klyngeanalyse (Silhouette, Elbow & DBSCAN)".into(),
+                parameters: format!("Variabler = [{}], beste k = {}", cl.variables.join(", "), cl.best_k_silhouette),
+                result: res.clone(),
+            });
+            added = Some(res);
+        }
+
+        if let Some(last) = added {
+            self.last_result = Some(last);
+        }
+    }
 }
 
 fn combo_col(ui: &mut Ui, id: &str, selected: &mut String, options: &[String]) {
@@ -645,6 +789,10 @@ fn render_manual_result(ui: &mut Ui, res: &ManualResult) {
                 ui.horizontal_wrapped(|ui| {
                     kpi_card(ui, "Levene (Median)", &format!("F={:.3}", variance.levene_median.f_stat), Some(&format!("p={:.4}", variance.levene_median.p_value)));
                     kpi_card(ui, "Bartlett", &format!("χ²={:.3}", variance.bartlett.chi2_stat), Some(&format!("p={:.4}", variance.bartlett.p_value)));
+                    if let Some(ref st) = variance.student_t_test {
+                        kpi_card(ui, "Student t-test", &format!("t={:.3} (d={:.2})", st.t_stat, st.cohens_d), Some(&format!("df={}, p={:.4}", st.df, st.p_value)));
+                    }
+                    kpi_card(ui, "Standard ANOVA", &format!("F={:.3} (η²={:.2})", variance.standard_anova.f_stat, variance.standard_anova.eta_squared), Some(&format!("p={:.4}", variance.standard_anova.p_value)));
                     kpi_card(ui, "Welchs ANOVA", &format!("F={:.3}", variance.welch_anova.f_stat), Some(&format!("p={:.4}", variance.welch_anova.p_value)));
                     if let Some(ref w) = variance.welch_t_test {
                         kpi_card(ui, "Welchs t-test", &format!("t={:.3}", w.t_stat), Some(&format!("p={:.4}", w.p_value)));

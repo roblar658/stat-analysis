@@ -9,8 +9,8 @@ use crate::report::{
     render_pdf_report_with_appendix,
 };
 use crate::ui::charts::{
-    primary_button, responsive_two_col, show_card, status_dot_color, BORDER_DEFAULT, PRIMARY_BLUE,
-    SURFACE_CARD, TEXT_PRIMARY, TEXT_SECONDARY,
+    primary_button, responsive_two_col, secondary_button, show_card, status_dot_color,
+    BORDER_DEFAULT, PRIMARY_BLUE, SURFACE_CARD, TEXT_PRIMARY, TEXT_SECONDARY,
 };
 use crate::ui::manual::ManualWorkbench;
 use crate::ui::views::{
@@ -488,6 +488,19 @@ impl eframe::App for StatApp {
 
                     if self.report.is_some() {
                         ui.separator();
+                        if secondary_button(ui, "Kjør alle tester").on_hover_text("Kjør hele den automatiske testpakken på nytt med gjeldende α").clicked() {
+                            if let Some(ref ds) = self.dataset {
+                                let new_rep = run_automatic_analysis(ds, self.alpha);
+                                let msg = format!(
+                                    "Kjørte alle {} forutsetningssjekker og {} hovedanalyser på nytt (α = {:.2}).",
+                                    new_rep.summary_badges.len(),
+                                    new_rep.recommended_analyses.len(),
+                                    self.alpha
+                                );
+                                self.report = Some(new_rep);
+                                self.status_toast = Some((msg, false));
+                            }
+                        }
                         let app_suffix = if self.manual.history.is_empty() {
                             String::new()
                         } else {
@@ -632,7 +645,7 @@ impl eframe::App for StatApp {
                             NavSection::LogisticRegression => render_logistic(ui, rep),
                             NavSection::Survival => render_survival(ui, rep, &mut self.view_state),
                             NavSection::Clustering => render_clustering(ui, rep),
-                            NavSection::ManualWorkbench => self.manual.render(ui, ds, self.alpha),
+                            NavSection::ManualWorkbench => self.manual.render(ui, ds, rep, self.alpha),
                             NavSection::DataExplorer => render_data_explorer(ui, ds, &mut self.view_state),
                         }
 
