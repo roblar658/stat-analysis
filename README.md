@@ -12,7 +12,6 @@ Et profesjonelt, lyst og høykontrast desktop-program i **ren Rust** (`eframe` +
 
 ## Bilder
 
-<img width="589" height="451" alt="image" src="https://github.com/user-attachments/assets/847c8e17-e909-4037-954d-e45d2ba57bd7" />
 <img width="959" height="563" alt="image" src="https://github.com/user-attachments/assets/4846dcdf-93a9-403e-a655-dac23f850451" />
 <img width="935" height="562" alt="image" src="https://github.com/user-attachments/assets/afb90d1d-9a25-4b1d-a941-0eac006b37a9" />
 <img width="959" height="562" alt="image" src="https://github.com/user-attachments/assets/95ed02f7-02b9-4b9c-af88-0ff5168bc3b3" />
