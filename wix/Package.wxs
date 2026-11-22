@@ -3,10 +3,10 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
 
   <Package Name="stat-analysis"
-           Manufacturer="stat-analysis"
+           Manufacturer="Robert Larsen"
            Version="0.1.0.0"
            UpgradeCode="7B91E4A2-3D5C-4A8F-9C2E-6E1F4A8B2D39"
-           Scope="perMachine"
+           Scope="perUser"
            InstallerVersion="500">
 
     <MajorUpgrade DowngradeErrorMessage="En nyere versjon av [ProductName] er allerede installert." />
@@ -17,11 +17,29 @@
     <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
     <WixVariable Id="WixUILicenseRtf" Value="wix\License.rtf" />
 
-    <ui:WixUI Id="WixUI_InstallDir" />
+    <!-- Optional "Launch stat-analysis" checkbox on Finish page -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Start stat-analysis" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="[#StatAnalysisExe]" />
+    <CustomAction Id="LaunchApplication"
+                  DllEntry="WixShellExec"
+                  Impersonate="yes"
+                  BinaryRef="Wix4UtilCA_X86" />
 
-    <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="stat-analysis">
-        <Directory Id="ExamplesFolder" Name="examples" />
+    <UI>
+      <ui:WixUI Id="WixUI_InstallDir" />
+      <Publish Dialog="ExitDialog"
+               Control="Finish"
+               Event="DoAction"
+               Value="LaunchApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="UserProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="stat-analysis">
+          <Directory Id="ExamplesFolder" Name="examples" />
+        </Directory>
       </Directory>
     </StandardDirectory>
 
@@ -31,56 +49,59 @@
 
     <StandardDirectory Id="DesktopFolder" />
 
-    <!-- Main executable + PATH registration -->
+    <!-- Main executable + user PATH -->
     <ComponentGroup Id="MainAppComponents" Directory="INSTALLFOLDER">
       <Component Id="MainExecutable" Guid="A4C2E118-52B1-4C94-8E73-11D29B5401A1">
         <File Id="StatAnalysisExe"
-              Source="target\release\stat-analysis.exe"
-              KeyPath="yes" />
-        <Environment Id="AddToPath"
+              Source="target\release\stat-analysis.exe" />
+        <Environment Id="AddToUserPath"
                      Name="PATH"
                      Value="[INSTALLFOLDER]"
                      Permanent="no"
                      Part="last"
                      Action="set"
-                     System="yes" />
+                     System="no" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\Robert Larsen\stat-analysis"
+                       Name="Installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+        <RemoveFolder Id="RemoveUserProgramsFolder" Directory="UserProgramsFolder" On="uninstall" />
       </Component>
+
       <Component Id="ReadmeDoc" Guid="B8F3D219-63C2-4D85-9F84-22E3AC6512B2">
-        <File Id="ReadmeMd" Source="README.md" KeyPath="yes" />
+        <File Id="ReadmeMd" Source="README.md" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\Robert Larsen\stat-analysis"
+                       Name="Readme"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
     <!-- 10 Standard Example CSV Datasets -->
     <ComponentGroup Id="ExampleDatasets" Directory="ExamplesFolder">
-      <Component Id="Ex01" Guid="C1010001-74D3-4E96-AF95-33F4BD762301">
-        <File Source="examples\01_komplett_studie.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex02" Guid="C1010002-74D3-4E96-AF95-33F4BD762302">
-        <File Source="examples\02_normalfordeling_sma_utvalg.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex03" Guid="C1010003-74D3-4E96-AF95-33F4BD762303">
-        <File Source="examples\03_varians_grupper_welch.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex04" Guid="C1010004-74D3-4E96-AF95-33F4BD762304">
-        <File Source="examples\04_repeterte_maalinger_sfaerisitet.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex05" Guid="C1010005-74D3-4E96-AF95-33F4BD762305">
-        <File Source="examples\05_boligpriser_multikollinearitet.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex06" Guid="C1010006-74D3-4E96-AF95-33F4BD762306">
-        <File Source="examples\06_tidsserie_autokorrelasjon.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex07" Guid="C1010007-74D3-4E96-AF95-33F4BD762307">
-        <File Source="examples\07_inntekt_heteroskedastisitet.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex08" Guid="C1010008-74D3-4E96-AF95-33F4BD762308">
-        <File Source="examples\08_undersokelse_manglende_faktor.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex09" Guid="C1010009-74D3-4E96-AF95-33F4BD762309">
-        <File Source="examples\09_kreditt_logistisk_roc.csv" KeyPath="yes" />
-      </Component>
-      <Component Id="Ex10" Guid="C1010010-74D3-4E96-AF95-33F4BD762310">
-        <File Source="examples\10_klinisk_overlevelse_klynger.csv" KeyPath="yes" />
+      <Component Id="ExampleCsvFiles" Guid="C1010099-74D3-4E96-AF95-33F4BD762399">
+        <File Source="examples\01_komplett_studie.csv" />
+        <File Source="examples\02_normalfordeling_sma_utvalg.csv" />
+        <File Source="examples\03_varians_grupper_welch.csv" />
+        <File Source="examples\04_repeterte_maalinger_sfaerisitet.csv" />
+        <File Source="examples\05_boligpriser_multikollinearitet.csv" />
+        <File Source="examples\06_tidsserie_autokorrelasjon.csv" />
+        <File Source="examples\07_inntekt_heteroskedastisitet.csv" />
+        <File Source="examples\08_undersokelse_manglende_faktor.csv" />
+        <File Source="examples\09_kreditt_logistisk_roc.csv" />
+        <File Source="examples\10_klinisk_overlevelse_klynger.csv" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\Robert Larsen\stat-analysis"
+                       Name="Examples"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+        <RemoveFolder Id="RemoveExamplesFolder" Directory="ExamplesFolder" On="uninstall" />
       </Component>
     </ComponentGroup>
 
@@ -92,14 +113,14 @@
         <Shortcut Id="ApplicationStartMenuShortcut"
                   Name="stat-analysis"
                   Description="Statistisk Diagnostikk og Modellkvalitet"
-                  Target="[INSTALLFOLDER]stat-analysis.exe"
+                  Target="[#StatAnalysisExe]"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="AppIcon.ico" />
         <RemoveFolder Id="CleanUpStartMenuFolder"
                       Directory="ApplicationProgramsFolder"
                       On="uninstall" />
         <RegistryValue Root="HKCU"
-                       Key="Software\stat-analysis"
+                       Key="Software\Robert Larsen\stat-analysis"
                        Name="StartMenuShortcut"
                        Type="integer"
                        Value="1"
@@ -112,11 +133,11 @@
         <Shortcut Id="DesktopShortcut"
                   Name="stat-analysis"
                   Description="Statistisk Diagnostikk og Modellkvalitet"
-                  Target="[INSTALLFOLDER]stat-analysis.exe"
+                  Target="[#StatAnalysisExe]"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="AppIcon.ico" />
         <RegistryValue Root="HKCU"
-                       Key="Software\stat-analysis"
+                       Key="Software\Robert Larsen\stat-analysis"
                        Name="DesktopShortcut"
                        Type="integer"
                        Value="1"

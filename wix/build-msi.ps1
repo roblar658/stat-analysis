@@ -18,6 +18,7 @@ Write-Host "Bygger WiX MSI-installasjonsfil: $outMsi" -ForegroundColor Cyan
 wix build "$root\wix\Package.wxs" `
     -arch x64 `
     -ext WixToolset.UI.wixext `
+    -ext WixToolset.Util.wixext `
     -o $outMsi
 
 if ($LASTEXITCODE -eq 0) {
