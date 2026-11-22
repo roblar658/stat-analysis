@@ -19,6 +19,8 @@ pub struct SchoenfeldCovariateTest {
     pub chi2_stat: f64,
     pub p_value: f64,
     pub ph_met: bool,
+    pub hr_early_t25: f64,
+    pub hr_late_t75: f64,
     pub points: Vec<(f64, f64)>, // (event_time, scaled_schoenfeld + beta)
 }
 
@@ -322,12 +324,32 @@ pub fn analyze_cox_ph(
             .map(|(i, &t)| (t, beta_orig[j] + scaled_s[i][j] / x_stds[j]))
             .collect();
 
+        // Time-varying beta(t) = a + b * ln(t) fallback for early (25%) vs late (75%) hazard ratio
+        let log_ts: Vec<f64> = pts.iter().map(|&(t, _)| t.max(1e-6).ln()).collect();
+        let betas_t: Vec<f64> = pts.iter().map(|&(_, b)| b).collect();
+        let m_lt = mean(&log_ts);
+        let m_bt = mean(&betas_t);
+        let mut s_num = 0.0;
+        let mut s_den = 0.0;
+        for (&lt, &bt) in log_ts.iter().zip(betas_t.iter()) {
+            s_num += (lt - m_lt) * (bt - m_bt);
+            s_den += (lt - m_lt).powi(2);
+        }
+        let slope_lt = if s_den > 1e-12 { s_num / s_den } else { 0.0 };
+        let inter_lt = m_bt - slope_lt * m_lt;
+        let t25 = log_ts[log_ts.len() / 4];
+        let t75 = log_ts[(log_ts.len() * 3 / 4).min(log_ts.len() - 1)];
+        let hr_early_t25 = (inter_lt + slope_lt * t25).clamp(-20.0, 20.0).exp();
+        let hr_late_t75 = (inter_lt + slope_lt * t75).clamp(-20.0, 20.0).exp();
+
         schoenfeld_tests.push(SchoenfeldCovariateTest {
             variable: predictor_names[j].clone(),
             rho_time: rho_j,
             chi2_stat: chi2_j,
             p_value: p_j,
             ph_met: p_j >= alpha,
+            hr_early_t25,
+            hr_late_t75,
             points: pts,
         });
     }
@@ -359,7 +381,7 @@ pub fn analyze_cox_ph(
     let recommendation = if ph_met {
         "Standard Cox proporsjonal hasard-modell er gyldig — risikoforholdet er tilnærmet konstant over tid.".to_string()
     } else {
-        "Inkluder tidsavhengig kovariat (X * log(tid)), stratifiser på variabelen som bryter PH, eller del opp tidsintervallene.".to_string()
+        "PH-forutsetningen er brutt: tidsavhengig hazard-ratio (tidlig t25 vs. sen t75 basert på beta(t) ~ ln(tid)) er beregnet per kovariat i tabellen under.".to_string()
     };
 
     Ok(CoxSurvivalReport {

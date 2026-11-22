@@ -682,6 +682,28 @@ pub fn render_pdf_report_with_appendix(
         &sum_rows,
     );
 
+    // Automatically Selected Main Statistical Analyses (e.g. Student t-test / Welch / Mann-Whitney / ANOVA)
+    if !rep.recommended_analyses.is_empty() {
+        pdf.section_heading("Utført hovedanalyse (valgt automatisk etter forutsetningssjekk)");
+        let ra_rows: Vec<Vec<String>> = rep
+            .recommended_analyses
+            .iter()
+            .map(|ra| {
+                vec![
+                    format!("{} ({})", ra.domain, ra.outcome),
+                    ra.chosen_test.clone(),
+                    ra.why_chosen.clone(),
+                    format!("{} | Beregning: {}", ra.result_summary, ra.formula_and_calc),
+                ]
+            })
+            .collect();
+        pdf.table(
+            &["Analyse / Utfall", "Valgt test", "Begrunnelse (forutsetninger)", "Resultat og utregning"],
+            &[105.0, 96.0, 145.0, CONTENT_W - 346.0],
+            &ra_rows,
+        );
+    }
+
     // 1. Normality
     if !rep.normality_checks.is_empty() {
         pdf.section_heading("1. Normalfordeling (Shapiro-Wilk / Kolmogorov-Smirnov)");
@@ -725,8 +747,12 @@ pub fn render_pdf_report_with_appendix(
             vec!["Levene (median / Brown-Forsythe)".into(), format!("F = {:.3}", vh.levene_median.f_stat), format!("{}, {}", vh.levene_median.df1, vh.levene_median.df2), format!("{:.4}", vh.levene_median.p_value)],
             vec!["Levene (gjennomsnitt)".into(), format!("F = {:.3}", vh.levene_mean.f_stat), format!("{}, {}", vh.levene_mean.df1, vh.levene_mean.df2), format!("{:.4}", vh.levene_mean.p_value)],
             vec!["Bartletts test".into(), format!("chi2 = {:.3}", vh.bartlett.chi2_stat), format!("{}", vh.bartlett.df), format!("{:.4}", vh.bartlett.p_value)],
+            vec!["Standard enveis ANOVA".into(), format!("F = {:.3} (eta² = {:.3})", vh.standard_anova.f_stat, vh.standard_anova.eta_squared), format!("{}, {}", vh.standard_anova.df1, vh.standard_anova.df2), format!("{:.4}", vh.standard_anova.p_value)],
             vec!["Welchs ANOVA (fallback)".into(), format!("F = {:.3}", vh.welch_anova.f_stat), format!("{:.1}, {:.1}", vh.welch_anova.df1, vh.welch_anova.df2), format!("{:.4}", vh.welch_anova.p_value)],
         ];
+        if let Some(ref st) = vh.student_t_test {
+            rows.push(vec!["Student uavhengig t-test".into(), format!("t = {:.3} (d = {:.3})", st.t_stat, st.cohens_d), format!("{}", st.df), format!("{:.4}", st.p_value)]);
+        }
         if let Some(ref wt) = vh.welch_t_test {
             rows.push(vec!["Welchs t-test (fallback)".into(), format!("t = {:.3}", wt.t_stat), format!("{:.1}", wt.df), format!("{:.4}", wt.p_value)]);
         }
@@ -1025,6 +1051,175 @@ pub fn render_pdf_report_with_appendix(
             .collect();
         pdf.table(&["Antall klynger", "WCSS (Elbow)", "Silhouette-skår"], &[140.0, 175.0, CONTENT_W - 315.0], &rows);
     }
+
+    // =========================================================================
+    // APPENDIKS: Matematiske formler og beregningsgrunnlag for alle tester
+    // =========================================================================
+    pdf.new_page();
+    pdf.draw_rect_fill(MARGIN_L, pdf.y - 48.0, CONTENT_W, 50.0, 0.114, 0.306, 0.847);
+    pdf.draw_text(
+        MARGIN_L + 14.0,
+        pdf.y - 20.0,
+        "F2",
+        15.5,
+        1.0,
+        1.0,
+        1.0,
+        "APPENDIKS — Matematiske formler og beregninger",
+    );
+    pdf.draw_text(
+        MARGIN_L + 14.0,
+        pdf.y - 36.0,
+        "F1",
+        9.2,
+        0.859,
+        0.918,
+        0.996,
+        "Komplett formeloversikt og innsatte tallverdier for alle statistiske metoder i stat-analysis",
+    );
+    pdf.y -= 64.0;
+
+    let mut formula_rows: Vec<Vec<String>> = vec![
+        vec![
+            "Shapiro-Wilk (n < 50)".into(),
+            "W = (sum a_i * x_(i))² / sum (x_i - x_bar)²".into(),
+            "Royston (1995) AS R94 vekter a_i og normaltransformasjon for p-verdi".into(),
+        ],
+        vec![
+            "Kolmogorov-Smirnov (n >= 50)".into(),
+            "D = max_i |F_n(x_i) - Phi((x_i - mu_hat) / s)|".into(),
+            "Lilliefors-korrigert p-verdi (Dallal-Wilkinson) ved estimerte mu og s".into(),
+        ],
+        vec![
+            "Skjevhet & Eksess-kurtose".into(),
+            "G1 = [n/((n-1)(n-2))] * sum z_i^3; G2 = [n(n+1)/((n-1)(n-2)(n-3))] * sum z_i^4 - 3(n-1)²/((n-2)(n-3))".into(),
+            "Standardiserte z_i = (x_i - x_bar) / s; G1=0 og G2=0 for normalfordeling".into(),
+        ],
+        vec![
+            "Student uavhengig t-test".into(),
+            "t = (x1_bar - x2_bar) / (s_p * sqrt(1/n1 + 1/n2)), df = n1 + n2 - 2".into(),
+            "s_p² = ((n1-1)s1² + (n2-1)s2²) / df; Cohen's d = (x1_bar - x2_bar) / s_p".into(),
+        ],
+        vec![
+            "Welchs t-test".into(),
+            "t = (x1_bar - x2_bar) / sqrt(s1²/n1 + s2²/n2)".into(),
+            "Welch-Satterthwaite df = (v1/n1 + v2/n2)² / [(v1/n1)²/(n1-1) + (v2/n2)²/(n2-1)]".into(),
+        ],
+        vec![
+            "Standard enveis ANOVA".into(),
+            "F = MSB / MSW = (SSB / (k-1)) / (SSW / (N-k)), eta² = SSB / (SSB + SSW)".into(),
+            "SSB = sum n_i(x_bar_i - x_bar)²; SSW = sum_i sum_j (x_ij - x_bar_i)²".into(),
+        ],
+        vec![
+            "Welchs ANOVA".into(),
+            "w_i = n_i / s_i²; F_W = [sum w_i(x_bar_i - x_bar_w)² / (k-1)] / [1 + (2(k-2)/(k²-1))*Lambda]".into(),
+            "Robust mot ulik gruppevarians; df1 = k-1, df2 = (k²-1) / (3*Lambda)".into(),
+        ],
+        vec![
+            "Levenes test (median / snitt)".into(),
+            "Z_ij = |Y_ij - Y_tilde_i|; F = Enveis ANOVA på absolutte avvik Z_ij".into(),
+            "Brown-Forsythe bruker gruppemedian Y_tilde_i (robust ved skjevhet)".into(),
+        ],
+        vec![
+            "Bartletts varianstest".into(),
+            "chi² = [(N-k)*ln(s_p²) - sum (n_i-1)*ln(s_i²)] / C, df = k - 1".into(),
+            "C = 1 + [1/(3(k-1))] * (sum 1/(n_i-1) - 1/(N-k))".into(),
+        ],
+        vec![
+            "Mann-Whitney U & Kruskal-Wallis H".into(),
+            "U = R1 - n1(n1+1)/2; H = [12/(N(N+1))] * sum(R_i²/n_i) - 3(N+1) (tie-korr.)".into(),
+            "Rangeringsbaserte ikke-parametriske tester; krever ikke normalfordeling".into(),
+        ],
+        vec![
+            "Bootstrapping (persentil 95% KI)".into(),
+            "SE_boot = sd(theta*_1..B); 95% KI = [Q_0.025(theta*), Q_0.975(theta*)]".into(),
+            "Trekk B utvalg med tilbakelegging av størrelse n".into(),
+        ],
+        vec![
+            "Mauchlys sfærisitet + GG / HF".into(),
+            "M = C*S*C^T; W = det(M) / (tr(M)/(k-1))^(k-1); eps_GG = tr(M)² / ((k-1)*tr(M²))".into(),
+            "Ortonormal Helmert-kontrast C; eps_HF = (n(k-1)*eps_GG - 2)/((k-1)(n-1-(k-1)*eps_GG))".into(),
+        ],
+        vec![
+            "OLS lineær regresjon".into(),
+            "beta_hat = (X^T X)^-1 X^T y; R² = 1 - RSS/TSS; R²_adj = 1 - (1-R²)(n-1)/(n-k)".into(),
+            "RMSE = sqrt(RSS/n); MAE = (1/n) sum |e_i|; AIC = 2p - 2*ln(L); BIC = p*ln(n) - 2*ln(L)".into(),
+        ],
+        vec![
+            "Multikollinearitet (VIF, Ridge, Lasso)".into(),
+            "VIF_j = 1 / (1 - R_j²); Ridge: (Z^T Z + lambda*I)^-1 Z^T y".into(),
+            "Lasso minimerer ||y - Z*beta||_2² + lambda*||beta||_1 (koordinatnedstigning)".into(),
+        ],
+        vec![
+            "Autokorrelasjon (DW, BG, Newey-West)".into(),
+            "DW = sum (e_t - e_{t-1})² / sum e_t²; BG LM = n * R_aux² ~ chi²(p)".into(),
+            "Newey-West HAC: (X^T X)^-1 * [S_0 + sum w_l(Gamma_l + Gamma_l^T)] * (X^T X)^-1".into(),
+        ],
+        vec![
+            "Heteroskedastisitet (BP, White, HC3)".into(),
+            "BP/White LM = n * R_aux² ~ chi²(df); V_HC3 = (X^T X)^-1 X^T diag(e_i²/(1-h_ii)²) X (X^T X)^-1".into(),
+            "Log-transformasjon refitter ln(Y) = X*beta når alle Y > 0".into(),
+        ],
+        vec![
+            "Uteliggere (Cook's D & Mahalanobis)".into(),
+            "D_i = [e_i² / (k*MSE)] * [h_ii / (1 - h_ii)²]; D_M² = (x_i - mu)^T Sigma^-1 (x_i - mu)".into(),
+            "Terskler: D_i > 4/n og D_i > 1; Mahalanobis D_M² ~ chi²(p) (p < 0.001)".into(),
+        ],
+        vec![
+            "Manglende data (Littles MCAR & MICE)".into(),
+            "d² = sum m_j (y_bar_j - mu_j)^T Sigma_j^-1 (y_bar_j - mu_j) ~ chi²(sum p_j - p)".into(),
+            "EM-algoritme (FIML) og MICE med Rubins regler: T = U_bar + (1 + 1/m)*B".into(),
+        ],
+        vec![
+            "Faktoranalyse (KMO & Bartlett)".into(),
+            "KMO = sum r_ij² / (sum r_ij² + sum u_ij²); chi² = -(n - 1 - (2p+5)/6) * ln|R|".into(),
+            "Partiell korrelasjon u_ij = -R^-1_ij / sqrt(R^-1_ii * R^-1_jj); df = p(p-1)/2".into(),
+        ],
+        vec![
+            "Logistisk (Hosmer-Lemeshow & ROC)".into(),
+            "P(Y=1|X) = 1/(1+exp(-X*beta)); HL chi² = sum_g [(O1_g-E1_g)²/E1_g + (O0_g-E0_g)²/E0_g]".into(),
+            "AUC = trapesintegrasjon under ROC-kurven (TPR mot FPR); df_HL = g - 2".into(),
+        ],
+        vec![
+            "Overlevelse (Cox PH & Schoenfeld)".into(),
+            "h(t|X) = h_0(t)*exp(X*beta); HR = exp(beta); r*_i = d * I(beta)^-1 * (x_i - x_bar(t_i))".into(),
+            "Breslow partiell likelihood; Grambsch-Therneau global test ~ chi²(p)".into(),
+        ],
+        vec![
+            "Klyngeanalyse (Elbow & Silhouette)".into(),
+            "WCSS = sum_c sum_{i in c} ||x_i - mu_c||²; s(i) = (b(i) - a(i)) / max(a(i), b(i))".into(),
+            "Standardiserte z-skårer, K-means++ initiering; Silhouette nær +1 = tydelige klynger".into(),
+        ],
+    ];
+
+    // Add dataset-specific substituted calculation rows from this run
+    if let Some(ref reg) = rep.linear_regression {
+        let rss = reg.rmse * reg.rmse * reg.n as f64;
+        let tss = if (1.0 - reg.r_squared) > 1e-9 {
+            rss / (1.0 - reg.r_squared)
+        } else {
+            rss
+        };
+        formula_rows.push(vec![
+            format!("Innsatt OLS ({})", reg.target),
+            format!("n = {}, k = {}, RSS = {:.2}, TSS = {:.2}", reg.n, reg.coefficients.len(), rss, tss),
+            format!("R² = 1 - {:.2}/{:.2} = {:.4}; RMSE = sqrt({:.2}/{}) = {:.4}; DW = {:.3}", rss, tss, reg.r_squared, rss, reg.n, reg.rmse, reg.autocorrelation.durbin_watson),
+        ]);
+    }
+    if let Some(ref vh) = rep.variance_homogeneity {
+        let an = &vh.standard_anova;
+        formula_rows.push(vec![
+            format!("Innsatt ANOVA ({})", vh.value_col),
+            format!("SSB = {:.2}, SSW = {:.2}, MSB = {:.2}, MSW = {:.2}", an.ss_between, an.ss_within, an.ms_between, an.ms_within),
+            format!("F({},{}) = {:.2}/{:.2} = {:.3} (p = {:.4}); eta² = {:.4}", an.df1, an.df2, an.ms_between, an.ms_within, an.f_stat, an.p_value, an.eta_squared),
+        ]);
+    }
+
+    pdf.table(
+        &["Metode / Test", "Formel / Innsatte tall", "Forklaring og beregningsgrunnlag"],
+        &[120.0, 215.0, CONTENT_W - 335.0],
+        &formula_rows,
+    );
 
     // =========================================================================
     // APPENDIKS: Alle manuelle utregninger fra Manuell testbenk

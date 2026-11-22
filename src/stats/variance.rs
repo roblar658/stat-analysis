@@ -30,6 +30,38 @@ pub struct BartlettResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StudentTTestResult {
+    pub group1: String,
+    pub group2: String,
+    pub n1: usize,
+    pub n2: usize,
+    pub mean1: f64,
+    pub mean2: f64,
+    pub mean_diff: f64,
+    pub pooled_sd: f64,
+    pub std_error: f64,
+    pub t_stat: f64,
+    pub df: usize,
+    pub p_value: f64,
+    pub cohens_d: f64,
+    pub significant: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StandardAnovaResult {
+    pub ss_between: f64,
+    pub ss_within: f64,
+    pub ms_between: f64,
+    pub ms_within: f64,
+    pub f_stat: f64,
+    pub df1: usize,
+    pub df2: usize,
+    pub p_value: f64,
+    pub eta_squared: f64,
+    pub significant: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WelchTTestResult {
     pub group1: String,
     pub group2: String,
@@ -57,6 +89,8 @@ pub struct VarianceHomogeneityReport {
     pub levene_mean: LeveneResult,
     pub levene_median: LeveneResult,
     pub bartlett: BartlettResult,
+    pub student_t_test: Option<StudentTTestResult>,
+    pub standard_anova: StandardAnovaResult,
     pub welch_t_test: Option<WelchTTestResult>,
     pub welch_anova: WelchAnovaResult,
     pub status: String,
@@ -160,6 +194,96 @@ pub fn bartlett_test(
         df,
         p_value,
         equal_variances: p_value >= alpha,
+    })
+}
+
+pub fn student_t_test(
+    g1_name: &str,
+    g1: &[f64],
+    g2_name: &str,
+    g2: &[f64],
+    alpha: f64,
+) -> Result<StudentTTestResult, String> {
+    if g1.len() < 2 || g2.len() < 2 {
+        return Err("Student t-test krever minst 2 observasjoner i hver gruppe.".to_string());
+    }
+    let n1 = g1.len();
+    let n2 = g2.len();
+    let m1 = mean(g1);
+    let m2 = mean(g2);
+    let v1 = variance(g1);
+    let v2 = variance(g2);
+    let df = n1 + n2 - 2;
+    let sp2 = (((n1 - 1) as f64 * v1) + ((n2 - 1) as f64 * v2)) / (df as f64);
+    let pooled_sd = sp2.max(0.0).sqrt();
+    let se = (sp2 * (1.0 / n1 as f64 + 1.0 / n2 as f64)).max(1e-18).sqrt();
+    let mean_diff = m1 - m2;
+    let t_stat = if se > 1e-15 { mean_diff / se } else { 0.0 };
+    let p_value = t_two_tailed_p(t_stat, df as f64);
+    let cohens_d = if pooled_sd > 1e-15 {
+        mean_diff / pooled_sd
+    } else {
+        0.0
+    };
+
+    Ok(StudentTTestResult {
+        group1: g1_name.to_string(),
+        group2: g2_name.to_string(),
+        n1,
+        n2,
+        mean1: m1,
+        mean2: m2,
+        mean_diff,
+        pooled_sd,
+        std_error: se,
+        t_stat,
+        df,
+        p_value,
+        cohens_d,
+        significant: p_value < alpha,
+    })
+}
+
+pub fn standard_one_way_anova(
+    groups: &[(String, Vec<f64>)],
+    alpha: f64,
+) -> Result<StandardAnovaResult, String> {
+    let k = groups.len();
+    if k < 2 {
+        return Err("Enveis ANOVA krever minst 2 grupper.".to_string());
+    }
+    let n_tot: usize = groups.iter().map(|(_, v)| v.len()).sum();
+    if n_tot <= k {
+        return Err("For få observasjoner for enveis ANOVA.".to_string());
+    }
+    let grand_mean: f64 = groups.iter().flat_map(|(_, v)| v.iter().copied()).sum::<f64>() / n_tot as f64;
+    let mut ss_between = 0.0;
+    let mut ss_within = 0.0;
+    for (_, vals) in groups {
+        let m_i = mean(vals);
+        ss_between += (vals.len() as f64) * (m_i - grand_mean).powi(2);
+        ss_within += vals.iter().map(|&x| (x - m_i).powi(2)).sum::<f64>();
+    }
+    let df1 = k - 1;
+    let df2 = n_tot - k;
+    let ms_between = ss_between / df1 as f64;
+    let ms_within = (ss_within / df2 as f64).max(1e-15);
+    let f_stat = (ms_between / ms_within).max(0.0);
+    let p_value = f_upper_p(f_stat, df1 as f64, df2 as f64);
+    let ss_total = (ss_between + ss_within).max(1e-15);
+    let eta_squared = (ss_between / ss_total).clamp(0.0, 1.0);
+
+    Ok(StandardAnovaResult {
+        ss_between,
+        ss_within,
+        ms_between,
+        ms_within,
+        f_stat,
+        df1,
+        df2,
+        p_value,
+        eta_squared,
+        significant: p_value < alpha,
     })
 }
 
@@ -305,6 +429,19 @@ pub fn check_variance_homogeneity(
     let levene_median = levene_test(&valid_groups, true, alpha)?;
     let bartlett = bartlett_test(&valid_groups, alpha)?;
 
+    let student_t = if valid_groups.len() == 2 {
+        Some(student_t_test(
+            &valid_groups[0].0,
+            &valid_groups[0].1,
+            &valid_groups[1].0,
+            &valid_groups[1].1,
+            alpha,
+        )?)
+    } else {
+        None
+    };
+    let standard_a = standard_one_way_anova(&valid_groups, alpha)?;
+
     let welch_t = if valid_groups.len() == 2 {
         Some(welch_t_test(
             &valid_groups[0].0,
@@ -355,6 +492,8 @@ pub fn check_variance_homogeneity(
         levene_mean,
         levene_median,
         bartlett,
+        student_t_test: student_t,
+        standard_anova: standard_a,
         welch_t_test: welch_t,
         welch_anova: welch_a,
         status,

@@ -177,6 +177,27 @@ fn test_pdf_report_includes_manual_appendix() {
     assert!(pdf_str.contains("APPENDIKS"), "PDF missing APPENDIKS banner");
     assert!(pdf_str.contains("Appendiks A.1"), "PDF missing Appendiks A.1");
     assert!(pdf_str.contains("Appendiks A.2"), "PDF missing Appendiks A.2");
+    assert!(pdf_str.contains("Matematiske formler"), "PDF missing formulas section");
+    assert!(pdf_str.contains("Shapiro-Wilk"), "PDF missing Shapiro-Wilk formula");
+    assert!(pdf_str.contains("Cohen's d"), "PDF missing Student t-test formula");
+}
+
+#[test]
+fn test_automatic_t_test_selection_when_assumptions_met() {
+    // 2 normal groups with equal variance -> automatic decision engine MUST choose Student's independent t-test
+    let csv = "gruppe,score\n\
+A,10.1\nA,10.5\nA,9.8\nA,10.3\nA,9.9\nA,10.2\nA,10.0\nA,9.7\nA,10.4\nA,10.1\n\
+B,12.2\nB,12.6\nB,11.9\nB,12.4\nB,12.0\nB,12.3\nB,12.1\nB,11.8\nB,12.5\nB,12.2\n";
+    let ds = Dataset::from_csv_str("ttest_case.csv", csv).unwrap();
+    let rep = run_automatic_analysis(&ds, 0.05);
+    let chosen = rep
+        .recommended_analyses
+        .iter()
+        .find(|r| r.outcome == "score")
+        .expect("Expected recommended analysis for score");
+    assert_eq!(chosen.chosen_test, "Student uavhengig t-test");
+    assert!(chosen.significant, "Expected significant t-test difference");
+    assert!(chosen.formula_and_calc.contains("Cohen's d"));
 }
 
 #[test]

@@ -65,6 +65,26 @@ pub fn render_dashboard(
     });
 
     ui.add_space(14.0);
+    if !rep.recommended_analyses.is_empty() {
+        show_card(ui, |ui| {
+            ui.label(bold_text("Automatisk valgte og utførte hovedanalyser (basert på forutsetningssjekk)", 14.5, TEXT_PRIMARY));
+            ui.label(RichText::new("Programmet sjekker først normalitet, varianshomogenitet, sfærisitet og regresjonsforutsetninger — og utfører deretter riktig test (f.eks. Student t-test, Welchs t-test, Mann-Whitney, ANOVA, Welch ANOVA, Kruskal-Wallis eller robust OLS).").size(12.2).color(TEXT_SECONDARY));
+            ui.add_space(6.0);
+            show_table(ui, "rec_main_tbl", |ui| {
+                table_header_row(ui, &["Analyseområde", "Utfall", "Valgt test", "Resultat", "Signifikant?"]);
+                for ra in &rep.recommended_analyses {
+                    ui.label(bold_text(&ra.domain, 12.5, TEXT_PRIMARY));
+                    ui.label(RichText::new(&ra.outcome).color(TEXT_PRIMARY));
+                    ui.label(bold_text(&ra.chosen_test, 12.5, Color32::from_rgb(29, 78, 216)));
+                    ui.label(RichText::new(&ra.result_summary).color(TEXT_PRIMARY));
+                    status_badge(ui, if ra.significant { "ok" } else { "warning" });
+                    ui.end_row();
+                }
+            });
+        });
+        ui.add_space(14.0);
+    }
+
     ui.label(bold_text("Alle sjekker — klikk «Åpne detaljer» på et kort for tabeller og interaktive plott", 14.5, TEXT_PRIMARY));
     ui.add_space(8.0);
 
@@ -314,6 +334,21 @@ pub fn render_variance(ui: &mut Ui, ds: &Dataset, rep: &AutoAnalysisReport) {
         });
 
         ui.add_space(10.0);
+        if let Some(ref st) = vh.student_t_test {
+            ui.label(bold_text(
+                &format!(
+                    "• Student uavhengig t-test ({} vs {}): t({}) = {:.3}, p = {:.4}, diff = {:.3}, Cohen's d = {:.3}",
+                    st.group1, st.group2, st.df, st.t_stat, st.p_value, st.mean_diff, st.cohens_d
+                ),
+                13.0,
+                TEXT_PRIMARY,
+            ));
+        }
+        ui.label(format!(
+            "• Standard enveis ANOVA: F({}, {}) = {:.3}, p = {:.4}, SSB = {:.2}, SSW = {:.2}, eta² = {:.3}",
+            vh.standard_anova.df1, vh.standard_anova.df2, vh.standard_anova.f_stat, vh.standard_anova.p_value,
+            vh.standard_anova.ss_between, vh.standard_anova.ss_within, vh.standard_anova.eta_squared
+        ));
         if let Some(ref wt) = vh.welch_t_test {
             ui.label(format!(
                 "• Welchs t-test ({} vs {}): t({:.1}) = {:.3}, p = {:.4}",
@@ -896,7 +931,7 @@ pub fn render_survival(ui: &mut Ui, rep: &AutoAnalysisReport, vs: &mut ViewState
         ui.label(bold_text("Cox Hazard Ratios & Schoenfeld-test per kovariat (klikk en rad for plott)", 14.5, TEXT_PRIMARY));
         ui.add_space(6.0);
         show_table(ui, "cox_tbl", |ui| {
-            table_header_row(ui, &["Kovariat", "β", "Hazard Ratio", "SE", "Wald p", "Schoenfeld r", "Schoenfeld p", "PH oppfylt?"]);
+            table_header_row(ui, &["Kovariat", "β", "Hazard Ratio", "HR(tidlig)", "HR(sen)", "Wald p", "Schoenfeld p", "PH oppfylt?"]);
             for (i, c) in cox.coefficients.iter().enumerate() {
                 let st = &cox.schoenfeld_tests[i];
                 if ui.selectable_label(vs.selected_schoenfeld_idx == i, bold_text(&c.name, 13.0, TEXT_PRIMARY)).clicked() {
@@ -904,9 +939,9 @@ pub fn render_survival(ui: &mut Ui, rep: &AutoAnalysisReport, vs: &mut ViewState
                 }
                 ui.label(format!("{:.4}", c.coef));
                 ui.label(format!("{:.3}", c.hazard_ratio));
-                ui.label(format!("{:.4}", c.std_error));
+                ui.label(format!("{:.3}", st.hr_early_t25));
+                ui.label(format!("{:.3}", st.hr_late_t75));
                 ui.label(format!("{:.4}", c.p_value));
-                ui.label(format!("{:.3}", st.rho_time));
                 ui.label(format!("{:.4}", st.p_value));
                 status_badge(ui, if st.ph_met { "ok" } else { "fail" });
                 ui.end_row();
@@ -945,9 +980,15 @@ pub fn render_clustering(ui: &mut Ui, rep: &AutoAnalysisReport) {
 
     callout_box(ui, &cl.status, &cl.interpretation, &cl.recommendation);
     ui.add_space(10.0);
-    ui.horizontal_wrapped(|ui| {
+        ui.horizontal_wrapped(|ui| {
         kpi_card(ui, "Beste Silhouette", &format!("{:.3}", cl.best_silhouette), Some(&format!("Ved k = {}", cl.best_k_silhouette)));
         kpi_card(ui, "Elbow anbefaler", &format!("k = {}", cl.elbow_k), Some("Knekkpunkt på WCSS"));
+        kpi_card(
+            ui,
+            "DBSCAN-alternativ",
+            &format!("{} klynger", cl.dbscan_fallback.n_clusters),
+            Some(&format!("eps={:.2}, {} støy", cl.dbscan_fallback.eps, cl.dbscan_fallback.noise_points)),
+        );
         kpi_card(ui, "Observasjoner", &format!("{}", cl.n), Some(&format!("{} variabler", cl.variables.len())));
     });
 

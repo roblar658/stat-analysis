@@ -38,6 +38,18 @@ pub struct GroupFallbackTests {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendedAnalysis {
+    pub domain: String,
+    pub outcome: String,
+    pub chosen_test: String,
+    pub why_chosen: String,
+    pub formula_and_calc: String,
+    pub result_summary: String,
+    pub p_value: Option<f64>,
+    pub significant: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoAnalysisReport {
     pub filename: String,
     pub generated_at: String,
@@ -45,6 +57,7 @@ pub struct AutoAnalysisReport {
     pub col_count: usize,
     pub columns: Vec<ColumnInfo>,
     pub summary_badges: Vec<SummaryBadge>,
+    pub recommended_analyses: Vec<RecommendedAnalysis>,
     // Assumptions
     pub normality_checks: Vec<NormalityCheck>,
     pub normality_bootstraps: Vec<BootstrapResult>,
@@ -175,6 +188,7 @@ fn pick_regression_target(num_cols: &[String], exclude: &[String]) -> Option<(St
 pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
     let mut charts: Vec<NamedChart> = Vec::new();
     let mut summary_badges: Vec<SummaryBadge> = Vec::new();
+    let mut recommended_analyses: Vec<RecommendedAnalysis> = Vec::new();
     let mut notes: Vec<String> = Vec::new();
 
     let all_num_cols: Vec<String> = ds
@@ -325,10 +339,148 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                         let fb = GroupFallbackTests {
                             value_col: out_col.clone(),
                             group_col: g_col.clone(),
-                            mann_whitney: mw,
-                            kruskal_wallis: kw,
+                            mann_whitney: mw.clone(),
+                            kruskal_wallis: kw.clone(),
                             bootstraps,
                         };
+
+                        // Automatic decision engine: check per-group normality + Levene variance homogeneity
+                        // and execute the statistically valid group comparison (Student t-test / Welch t-test /
+                        // Mann-Whitney U / Standard ANOVA / Welch ANOVA / Kruskal-Wallis H).
+                        let all_groups_normal = groups.iter().all(|(gn, gv)| {
+                            check_normality(gn, gv, alpha).map(|r| r.is_normal).unwrap_or(false)
+                        });
+                        let equal_var = vh.levene_median.equal_variances;
+
+                        if groups.len() == 2 {
+                            if all_groups_normal && equal_var {
+                                if let Some(ref st) = vh.student_t_test {
+                                    recommended_analyses.push(RecommendedAnalysis {
+                                        domain: format!("Gruppesammenligning (2 grupper: {})", g_col),
+                                        outcome: out_col.clone(),
+                                        chosen_test: "Student uavhengig t-test".into(),
+                                        why_chosen: format!(
+                                            "Normalfordeling oppfylt i begge grupper og varianshomogenitet oppfylt (Levene p = {:.4} >= {:.2}) -> Student uavhengig t-test gir mening og er valgt.",
+                                            vh.levene_median.p_value, alpha
+                                        ),
+                                        formula_and_calc: format!(
+                                            "t = (x1_bar - x2_bar) / (s_p * sqrt(1/n1 + 1/n2)) = ({:.3} - {:.3}) / ({:.3} * sqrt(1/{} + 1/{})) = {:.3}, df = {}, Cohen's d = {:.3}",
+                                            st.mean1, st.mean2, st.pooled_sd, st.n1, st.n2, st.t_stat, st.df, st.cohens_d
+                                        ),
+                                        result_summary: format!(
+                                            "t({}) = {:.3}, p = {:.4}, differanse = {:.3}, Cohen's d = {:.3} ({})",
+                                            st.df, st.t_stat, st.p_value, st.mean_diff, st.cohens_d,
+                                            if st.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                        ),
+                                        p_value: Some(st.p_value),
+                                        significant: st.significant,
+                                    });
+                                }
+                            } else if all_groups_normal && !equal_var {
+                                if let Some(ref wt) = vh.welch_t_test {
+                                    recommended_analyses.push(RecommendedAnalysis {
+                                        domain: format!("Gruppesammenligning (2 grupper: {})", g_col),
+                                        outcome: out_col.clone(),
+                                        chosen_test: "Welchs t-test".into(),
+                                        why_chosen: format!(
+                                            "Normalfordeling oppfylt, men varianshomogenitet brutt (Levene p = {:.4} < {:.2}) -> Welchs t-test er valgt fremfor Student t-test.",
+                                            vh.levene_median.p_value, alpha
+                                        ),
+                                        formula_and_calc: format!(
+                                            "t = (x1_bar - x2_bar) / sqrt(s1^2/n1 + s2^2/n2) = {:.3}, Welch-Satterthwaite df = {:.1}",
+                                            wt.t_stat, wt.df
+                                        ),
+                                        result_summary: format!(
+                                            "t({:.1}) = {:.3}, p = {:.4}, differanse = {:.3} ({})",
+                                            wt.df, wt.t_stat, wt.p_value, wt.mean_diff,
+                                            if wt.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                        ),
+                                        p_value: Some(wt.p_value),
+                                        significant: wt.significant,
+                                    });
+                                }
+                            } else if let Some(ref m) = mw {
+                                recommended_analyses.push(RecommendedAnalysis {
+                                    domain: format!("Gruppesammenligning (2 grupper: {})", g_col),
+                                    outcome: out_col.clone(),
+                                    chosen_test: "Mann-Whitney U-test (ikke-parametrisk)".into(),
+                                    why_chosen: "Normalfordeling brutt i minst én gruppe -> ikke-parametrisk Mann-Whitney U er valgt fremfor t-test.".into(),
+                                    formula_and_calc: format!(
+                                        "U = min(U1, U2) = {:.1}, Z = {:.3}, median({}) = {:.3}, median({}) = {:.3}",
+                                        m.u_stat, m.z_stat, m.group1, m.median1, m.group2, m.median2
+                                    ),
+                                    result_summary: format!(
+                                        "U = {:.1}, Z = {:.3}, p = {:.4} ({})",
+                                        m.u_stat, m.z_stat, m.p_value,
+                                        if m.significant { "signifikant forskjell mellom gruppene" } else { "ingen signifikant forskjell" }
+                                    ),
+                                    p_value: Some(m.p_value),
+                                    significant: m.significant,
+                                });
+                            }
+                        } else if all_groups_normal && equal_var {
+                            let an = &vh.standard_anova;
+                            recommended_analyses.push(RecommendedAnalysis {
+                                domain: format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col),
+                                outcome: out_col.clone(),
+                                chosen_test: "Standard enveis ANOVA".into(),
+                                why_chosen: format!(
+                                    "Normalfordeling oppfylt i gruppene og varianshomogenitet oppfylt (Levene p = {:.4} >= {:.2}) -> standard enveis ANOVA er valgt.",
+                                    vh.levene_median.p_value, alpha
+                                ),
+                                formula_and_calc: format!(
+                                    "F = MSB / MSW = ({:.2} / {}) / ({:.2} / {}) = {:.3}, eta^2 = SSB / SST = {:.4}",
+                                    an.ss_between, an.df1, an.ss_within, an.df2, an.f_stat, an.eta_squared
+                                ),
+                                result_summary: format!(
+                                    "F({}, {}) = {:.3}, p = {:.4}, eta^2 = {:.3} ({})",
+                                    an.df1, an.df2, an.f_stat, an.p_value, an.eta_squared,
+                                    if an.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                ),
+                                p_value: Some(an.p_value),
+                                significant: an.significant,
+                            });
+                        } else if all_groups_normal && !equal_var {
+                            let wa = &vh.welch_anova;
+                            recommended_analyses.push(RecommendedAnalysis {
+                                domain: format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col),
+                                outcome: out_col.clone(),
+                                chosen_test: "Welchs ANOVA".into(),
+                                why_chosen: format!(
+                                    "Normalfordeling oppfylt, men varianshomogenitet brutt (Levene p = {:.4} < {:.2}) -> Welchs ANOVA er valgt.",
+                                    vh.levene_median.p_value, alpha
+                                ),
+                                formula_and_calc: format!(
+                                    "F_Welch = {:.3}, df1 = {:.1}, df2 = {:.1}",
+                                    wa.f_stat, wa.df1, wa.df2
+                                ),
+                                result_summary: format!(
+                                    "F({:.1}, {:.1}) = {:.3}, p = {:.4} ({})",
+                                    wa.df1, wa.df2, wa.f_stat, wa.p_value,
+                                    if wa.significant { "signifikant gruppeforskjell" } else { "ingen signifikant forskjell" }
+                                ),
+                                p_value: Some(wa.p_value),
+                                significant: wa.significant,
+                            });
+                        } else if let Some(ref k) = kw {
+                            recommended_analyses.push(RecommendedAnalysis {
+                                domain: format!("Gruppesammenligning ({} grupper: {})", groups.len(), g_col),
+                                outcome: out_col.clone(),
+                                chosen_test: "Kruskal-Wallis H-test (ikke-parametrisk)".into(),
+                                why_chosen: "Normalfordeling brutt i minst én gruppe -> ikke-parametrisk Kruskal-Wallis H er valgt fremfor ANOVA.".into(),
+                                formula_and_calc: format!(
+                                    "H = [12 / (N(N+1))] * sum(R_i^2/n_i) - 3(N+1) (tie-korrigert) = {:.3}, df = {}",
+                                    k.h_stat, k.df
+                                ),
+                                result_summary: format!(
+                                    "H({}) = {:.3}, p = {:.4} ({})",
+                                    k.df, k.h_stat, k.p_value,
+                                    if k.significant { "signifikant forskjell mellom gruppene" } else { "ingen signifikant forskjell" }
+                                ),
+                                p_value: Some(k.p_value),
+                                significant: k.significant,
+                            });
+                        }
 
                         if oi == 0 {
                             charts.push(NamedChart {
@@ -393,6 +545,30 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                         sp.mauchly_w, sp.mauchly_p_value, sp.epsilon_gg
                     ),
                     action: sp.recommendation.clone(),
+                });
+                let (rm_name, rm_p, rm_eps_str) = if sp.sphericity_met {
+                    ("Repeated Measures ANOVA (ukorrigert)", sp.p_uncorrected, format!("df = ({:.1}, {:.1})", sp.df1_uncorrected, sp.df2_uncorrected))
+                } else if sp.epsilon_gg < 0.75 {
+                    ("Repeated Measures ANOVA (Greenhouse-Geisser)", sp.p_greenhouse_geisser, format!("eps_GG = {:.3}, df_korr = ({:.2}, {:.2})", sp.epsilon_gg, sp.df1_uncorrected * sp.epsilon_gg, sp.df2_uncorrected * sp.epsilon_gg))
+                } else {
+                    ("Repeated Measures ANOVA (Huynh-Feldt)", sp.p_huynh_feldt, format!("eps_HF = {:.3}, df_korr = ({:.2}, {:.2})", sp.epsilon_hf, sp.df1_uncorrected * sp.epsilon_hf, sp.df2_uncorrected * sp.epsilon_hf))
+                };
+                recommended_analyses.push(RecommendedAnalysis {
+                    domain: "Repeterte målinger".into(),
+                    outcome: sp.columns.join(" / "),
+                    chosen_test: rm_name.into(),
+                    why_chosen: sp.recommendation.clone(),
+                    formula_and_calc: format!(
+                        "Mauchly W = {:.4} (p = {:.4}); F = MS_betingelse / MS_feil = {:.3}, {}",
+                        sp.mauchly_w, sp.mauchly_p_value, sp.rm_anova_f, rm_eps_str
+                    ),
+                    result_summary: format!(
+                        "F = {:.3}, p = {:.4} ({})",
+                        sp.rm_anova_f, rm_p,
+                        if rm_p < alpha { "signifikant endring over målingene" } else { "ingen signifikant endring" }
+                    ),
+                    p_value: Some(rm_p),
+                    significant: rm_p < alpha,
                 });
                 sphericity = Some(sp);
             }
@@ -611,6 +787,38 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
                     ),
                     action: "Sammenlign AIC/BIC mot reduserte modeller i tabellen under.".to_string(),
                 });
+                let high_vif = reg.multicollinearity.as_ref().map(|m| m.max_vif > 10.0).unwrap_or(false);
+                let hetero = reg.heteroscedasticity.bp_p_value < alpha || reg.heteroscedasticity.white_p_value < alpha;
+                let autocorr = reg.autocorrelation.bg_p_value < alpha || reg.autocorrelation.durbin_watson < 1.5 || reg.autocorrelation.durbin_watson > 2.5;
+                let (reg_choice, reg_why) = if high_vif {
+                    ("Ridge / Lasso-regresjon (eller variabelreduksjon)", format!("Alvorlig multikollinearitet (maks VIF = {:.2} > 10) -> bruk Ridge/Lasso eller fjern kollineære prediktorer.", reg.multicollinearity.as_ref().unwrap().max_vif))
+                } else if autocorr {
+                    ("OLS med Newey-West (HAC) standardfeil / AR(1)", format!("Autokorrelasjon påvist (DW = {:.3}, BG p = {:.4}) -> Newey-West HAC standardfeil valgt.", reg.autocorrelation.durbin_watson, reg.autocorrelation.bg_p_value))
+                } else if hetero {
+                    if reg.heteroscedasticity.log_y_fallback.improved {
+                        ("OLS med HC3 robuste standardfeil eller Log(Y)-regresjon", format!("Heteroskedastisitet påvist (BP p = {:.4}) -> HC3 eller ln(Y) (BP p = {:.4}) anbefales.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.log_y_fallback.bp_p_value.unwrap_or(0.0)))
+                    } else {
+                        ("OLS med HC3 robuste standardfeil", format!("Heteroskedastisitet påvist (BP p = {:.4}, White p = {:.4}) -> HC3 robuste standardfeil er valgt.", reg.heteroscedasticity.bp_p_value, reg.heteroscedasticity.white_p_value))
+                    }
+                } else {
+                    ("Standard OLS lineær regresjon", "Forutsetningene om homoskedastisitet, uavhengige feilledd og lav VIF er oppfylt -> standard OLS er gyldig.".into())
+                };
+                recommended_analyses.push(RecommendedAnalysis {
+                    domain: "Lineær regresjonsmodell".into(),
+                    outcome: reg.target.clone(),
+                    chosen_test: reg_choice.into(),
+                    why_chosen: reg_why,
+                    formula_and_calc: format!(
+                        "R^2 = 1 - RSS/TSS = {:.4}, Just. R^2 = {:.4}, RMSE = sqrt(RSS/{}) = {:.3}, AIC = {:.1}, BIC = {:.1}",
+                        reg.r_squared, reg.adj_r_squared, reg.n, reg.rmse, reg.aic, reg.bic
+                    ),
+                    result_summary: format!(
+                        "F = {:.2} (p = {:.4}), R^2 = {:.3}, Just. R^2 = {:.3}, RMSE = {:.3}",
+                        reg.f_stat, reg.f_p_value, reg.r_squared, reg.adj_r_squared, reg.rmse
+                    ),
+                    p_value: Some(reg.f_p_value),
+                    significant: reg.f_p_value < alpha,
+                });
                 linear_regression = Some(reg);
             }
         }
@@ -792,6 +1000,7 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
         col_count: ds.headers.len(),
         columns: ds.columns.clone(),
         summary_badges,
+        recommended_analyses,
         normality_checks,
         normality_bootstraps,
         variance_homogeneity,

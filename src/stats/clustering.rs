@@ -26,6 +26,15 @@ pub struct ClusterPoint2D {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbscanFallback {
+    pub eps: f64,
+    pub min_pts: usize,
+    pub n_clusters: usize,
+    pub noise_points: usize,
+    pub silhouette: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusteringReport {
     pub variables: Vec<String>,
     pub n: usize,
@@ -35,6 +44,7 @@ pub struct ClusteringReport {
     pub elbow_k: usize,
     pub cluster_summaries: Vec<ClusterSummary>,
     pub points_2d: Vec<ClusterPoint2D>,
+    pub dbscan_fallback: DbscanFallback,
     pub status: String,
     pub interpretation: String,
     pub recommendation: String,
@@ -193,7 +203,99 @@ fn silhouette_scores(data: &[Vec<f64>], labels: &[usize], k: usize) -> (f64, Vec
     (mean_sil, sils)
 }
 
-/// Clustering evaluation: K-means++, Elbow method (WCSS), Silhouette score, and 2D PCA projection.
+/// Density-based clustering fallback (DBSCAN) with automatic k-distance eps selection.
+fn run_dbscan(data: &[Vec<f64>]) -> DbscanFallback {
+    let n = data.len();
+    let p = data[0].len();
+    let min_pts = (p + 1).clamp(4, 8).min(n.saturating_sub(1).max(2));
+
+    // Estimate eps as the 75th percentile of each point's min_pts-th nearest neighbor distance
+    let mut k_dists = Vec::with_capacity(n);
+    for i in 0..n {
+        let mut ds: Vec<f64> = (0..n)
+            .filter(|&j| j != i)
+            .map(|j| sq_dist(&data[i], &data[j]).sqrt())
+            .collect();
+        ds.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let idx = (min_pts - 1).min(ds.len().saturating_sub(1));
+        k_dists.push(ds[idx]);
+    }
+    k_dists.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let eps = k_dists[(n * 3 / 4).min(n - 1)].max(0.15);
+    let eps2 = eps * eps;
+
+    let mut labels: Vec<i32> = vec![-2; n]; // -2 unvisited, -1 noise, >=0 cluster id
+    let mut cid: i32 = 0;
+
+    let region_query = |pt_idx: usize| -> Vec<usize> {
+        (0..n)
+            .filter(|&j| sq_dist(&data[pt_idx], &data[j]) <= eps2)
+            .collect()
+    };
+
+    for i in 0..n {
+        if labels[i] != -2 {
+            continue;
+        }
+        let neighbors = region_query(i);
+        if neighbors.len() < min_pts {
+            labels[i] = -1;
+            continue;
+        }
+        labels[i] = cid;
+        let mut queue = neighbors;
+        let mut head = 0;
+        while head < queue.len() {
+            let q = queue[head];
+            head += 1;
+            if labels[q] == -1 {
+                labels[q] = cid;
+            }
+            if labels[q] != -2 {
+                continue;
+            }
+            labels[q] = cid;
+            let q_nb = region_query(q);
+            if q_nb.len() >= min_pts {
+                for nb in q_nb {
+                    if labels[nb] == -2 || labels[nb] == -1 {
+                        queue.push(nb);
+                    }
+                }
+            }
+        }
+        cid += 1;
+    }
+
+    let n_clusters = cid.max(0) as usize;
+    let noise_points = labels.iter().filter(|&&l| l < 0).count();
+    let silhouette = if n_clusters >= 2 {
+        let valid_pts: Vec<Vec<f64>> = data
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| labels[i] >= 0)
+            .map(|(_, r)| r.clone())
+            .collect();
+        let valid_lbls: Vec<usize> = labels.iter().filter(|&&l| l >= 0).map(|&l| l as usize).collect();
+        if valid_pts.len() > n_clusters {
+            Some(silhouette_scores(&valid_pts, &valid_lbls, n_clusters).0)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    DbscanFallback {
+        eps,
+        min_pts,
+        n_clusters,
+        noise_points,
+        silhouette,
+    }
+}
+
+/// Clustering evaluation: K-means++, Elbow method (WCSS), Silhouette score, DBSCAN fallback, and 2D PCA projection.
 pub fn analyze_clustering(
     variables: &[String],
     rows: &[Vec<f64>],
@@ -338,6 +440,8 @@ pub fn analyze_clustering(
         })
         .collect();
 
+    let dbscan_fallback = run_dbscan(&std_rows);
+
     let status = if best_sil >= 0.5 {
         "ok"
     } else if best_sil >= 0.25 {
@@ -348,22 +452,25 @@ pub fn analyze_clustering(
     .to_string();
 
     let interpretation = format!(
-        "Høyeste gjennomsnittlige Silhouette-skår = {:.3} ved k = {} klynger. Elbow-metoden foreslår k = {} klynger.",
-        best_sil, best_k, elbow_k
+        "Høyeste gjennomsnittlige Silhouette-skår = {:.3} ved k = {} klynger. Elbow-metoden foreslår k = {} klynger. DBSCAN (eps={:.2}) fant {} klynger ({} støypunkter).",
+        best_sil, best_k, elbow_k, dbscan_fallback.eps, dbscan_fallback.n_clusters, dbscan_fallback.noise_points
     );
 
     let recommendation = if best_sil >= 0.5 {
         format!(
-            "Tydelig klyngestruktur (Silhouette = {:.3} >= 0.50). k = {} anbefales.",
+            "Tydelig klyngestruktur (Silhouette = {:.3} >= 0.50). K-means med k = {} anbefales.",
             best_sil, best_k
         )
     } else if best_sil >= 0.25 {
         format!(
-            "Moderat klyngeseparasjon (Silhouette = {:.3}). Sammenlign k = {} (Silhouette) og k = {} (Elbow) med domenekunnskap.",
-            best_sil, best_k, elbow_k
+            "Moderat klyngeseparasjon (Silhouette = {:.3}). Sammenlign K-means k = {} (Silhouette) / k = {} (Elbow) med DBSCAN ({} klynger).",
+            best_sil, best_k, elbow_k, dbscan_fallback.n_clusters
         )
     } else {
-        "Svak klyngeseparasjon (Silhouette < 0.25). Dataene har trolig lite naturlig klyngestruktur eller krever annen avstandsmetrikk / DBSCAN.".to_string()
+        format!(
+            "Svak K-means-separasjon (Silhouette = {:.3} < 0.25). DBSCAN-alternativet er beregnet (eps = {:.2}, {} klynger, {} støypunkter).",
+            best_sil, dbscan_fallback.eps, dbscan_fallback.n_clusters, dbscan_fallback.noise_points
+        )
     };
 
     Ok(ClusteringReport {
@@ -375,6 +482,7 @@ pub fn analyze_clustering(
         elbow_k,
         cluster_summaries,
         points_2d,
+        dbscan_fallback,
         status,
         interpretation,
         recommendation,
