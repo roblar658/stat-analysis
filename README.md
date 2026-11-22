@@ -10,6 +10,17 @@ Et profesjonelt, lyst og høykontrast desktop-program i **ren Rust** (`eframe` +
 - **Manuell testbenk**: Velg egne kolonner og parametere for alle 9 testfamilier og kjør på nytt når som helst.
 - **Eksport med Windows lagringsdialog**: Lagre enkeltvise SVG-figurer direkte fra hver graf, eller eksporter full rapport som **ekte PDF (.pdf)**, **ZIP (PDF + alle SVG)**, **Markdown (.md)** eller **JSON (.json)**.
 
+## Bilder
+
+<img width="589" height="451" alt="image" src="https://github.com/user-attachments/assets/847c8e17-e909-4037-954d-e45d2ba57bd7" />
+<img width="959" height="563" alt="image" src="https://github.com/user-attachments/assets/4846dcdf-93a9-403e-a655-dac23f850451" />
+<img width="935" height="562" alt="image" src="https://github.com/user-attachments/assets/afb90d1d-9a25-4b1d-a941-0eac006b37a9" />
+<img width="959" height="562" alt="image" src="https://github.com/user-attachments/assets/95ed02f7-02b9-4b9c-af88-0ff5168bc3b3" />
+<img width="954" height="553" alt="image" src="https://github.com/user-attachments/assets/a7772db8-7051-4e82-b754-7279c66f4bb4" />
+<img width="959" height="563" alt="image" src="https://github.com/user-attachments/assets/0dfcd4ef-29f9-47da-b794-33d1b330f133" />
+<img width="959" height="558" alt="image" src="https://github.com/user-attachments/assets/80d10ac2-73f8-497f-a875-b758662d5559" />
+
+
 ## Kjøring
 
 ### Start desktop-programmet
