@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="stat-analysis"
+           Manufacturer="stat-analysis"
+           Version="0.1.0.0"
+           UpgradeCode="7B91E4A2-3D5C-4A8F-9C2E-6E1F4A8B2D39"
+           Scope="perMachine"
+           InstallerVersion="500">
+
+    <MajorUpgrade DowngradeErrorMessage="En nyere versjon av [ProductName] er allerede installert." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="AppIcon.ico" SourceFile="wix\stat-analysis.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <WixVariable Id="WixUILicenseRtf" Value="wix\License.rtf" />
+
+    <ui:WixUI Id="WixUI_InstallDir" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="stat-analysis">
+        <Directory Id="ExamplesFolder" Name="examples" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="stat-analysis" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- Main executable + PATH registration -->
+    <ComponentGroup Id="MainAppComponents" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="A4C2E118-52B1-4C94-8E73-11D29B5401A1">
+        <File Id="StatAnalysisExe"
+              Source="target\release\stat-analysis.exe"
+              KeyPath="yes" />
+        <Environment Id="AddToPath"
+                     Name="PATH"
+                     Value="[INSTALLFOLDER]"
+                     Permanent="no"
+                     Part="last"
+                     Action="set"
+                     System="yes" />
+      </Component>
+      <Component Id="ReadmeDoc" Guid="B8F3D219-63C2-4D85-9F84-22E3AC6512B2">
+        <File Id="ReadmeMd" Source="README.md" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- 10 Standard Example CSV Datasets -->
+    <ComponentGroup Id="ExampleDatasets" Directory="ExamplesFolder">
+      <Component Id="Ex01" Guid="C1010001-74D3-4E96-AF95-33F4BD762301">
+        <File Source="examples\01_komplett_studie.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex02" Guid="C1010002-74D3-4E96-AF95-33F4BD762302">
+        <File Source="examples\02_normalfordeling_sma_utvalg.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex03" Guid="C1010003-74D3-4E96-AF95-33F4BD762303">
+        <File Source="examples\03_varians_grupper_welch.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex04" Guid="C1010004-74D3-4E96-AF95-33F4BD762304">
+        <File Source="examples\04_repeterte_maalinger_sfaerisitet.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex05" Guid="C1010005-74D3-4E96-AF95-33F4BD762305">
+        <File Source="examples\05_boligpriser_multikollinearitet.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex06" Guid="C1010006-74D3-4E96-AF95-33F4BD762306">
+        <File Source="examples\06_tidsserie_autokorrelasjon.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex07" Guid="C1010007-74D3-4E96-AF95-33F4BD762307">
+        <File Source="examples\07_inntekt_heteroskedastisitet.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex08" Guid="C1010008-74D3-4E96-AF95-33F4BD762308">
+        <File Source="examples\08_undersokelse_manglende_faktor.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex09" Guid="C1010009-74D3-4E96-AF95-33F4BD762309">
+        <File Source="examples\09_kreditt_logistisk_roc.csv" KeyPath="yes" />
+      </Component>
+      <Component Id="Ex10" Guid="C1010010-74D3-4E96-AF95-33F4BD762310">
+        <File Source="examples\10_klinisk_overlevelse_klynger.csv" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Start Menu & Desktop Shortcuts -->
+    <ComponentGroup Id="ShortcutComponents">
+      <Component Id="StartMenuShortcut"
+                 Directory="ApplicationProgramsFolder"
+                 Guid="D2020001-85E4-4FA7-B0A6-4405CE873401">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="stat-analysis"
+                  Description="Statistisk Diagnostikk og Modellkvalitet"
+                  Target="[INSTALLFOLDER]stat-analysis.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+        <RemoveFolder Id="CleanUpStartMenuFolder"
+                      Directory="ApplicationProgramsFolder"
+                      On="uninstall" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\stat-analysis"
+                       Name="StartMenuShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+
+      <Component Id="DesktopShortcutComp"
+                 Directory="DesktopFolder"
+                 Guid="D2020002-85E4-4FA7-B0A6-4405CE873402">
+        <Shortcut Id="DesktopShortcut"
+                  Name="stat-analysis"
+                  Description="Statistisk Diagnostikk og Modellkvalitet"
+                  Target="[INSTALLFOLDER]stat-analysis.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="AppIcon.ico" />
+        <RegistryValue Root="HKCU"
+                       Key="Software\stat-analysis"
+                       Name="DesktopShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="ProductFeature"
+             Title="stat-analysis"
+             Description="Installerer stat-analysis, 10 standard eksempeldatasett og snarveier."
+             Level="1">
+      <ComponentGroupRef Id="MainAppComponents" />
+      <ComponentGroupRef Id="ExampleDatasets" />
+      <ComponentGroupRef Id="ShortcutComponents" />
+    </Feature>
+
+  </Package>
+</Wix>

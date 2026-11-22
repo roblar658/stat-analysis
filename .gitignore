@@ -1,7 +1,10 @@
 /target/
 /demo_rapport/
 /stat_rapport/
+/dist/
 *.exe
+*.msi
+*.wixpdb
 *.pdb
 .DS_Store
 Thumbs.db
