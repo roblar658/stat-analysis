@@ -1,0 +1,7 @@
+/target/
+/demo_rapport/
+/stat_rapport/
+*.exe
+*.pdb
+.DS_Store
+Thumbs.db
