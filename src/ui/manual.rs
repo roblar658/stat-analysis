@@ -4,24 +4,23 @@ use crate::plots::{
     svg_elbow_silhouette, svg_histogram, svg_leverage_cooks, svg_missingness, svg_qq_plot,
     svg_residuals_vs_fitted, svg_roc_curve, svg_schoenfeld, svg_scree_plot, svg_sphericity_profile,
 };
-use crate::stats::clustering::{analyze_clustering, ClusteringReport};
-use crate::stats::factor::{check_factor_suitability, FactorSuitabilityReport};
-use crate::stats::logistic::{analyze_logistic_regression, LogisticReport};
-use crate::stats::missing::{analyze_missing_data, MissingDataReport};
-use crate::stats::normality::{
-    bootstrap_mean, check_normality, kruskal_wallis, mann_whitney_u, BootstrapResult,
-    KruskalWallisResult, MannWhitneyResult, NormalityCheck,
-};
-use crate::stats::regression::{full_linear_regression_diagnostics, LinearRegressionFullReport};
-use crate::stats::sphericity::{check_sphericity, SphericityReport};
-use crate::stats::survival::{analyze_cox_ph, CoxSurvivalReport};
-use crate::stats::variance::{check_variance_homogeneity, VarianceHomogeneityReport};
+use crate::report::{ManualCalcResult as ManualResult, ManualHistoryEntry};
+use crate::stats::clustering::analyze_clustering;
+use crate::stats::factor::check_factor_suitability;
+use crate::stats::logistic::analyze_logistic_regression;
+use crate::stats::missing::analyze_missing_data;
+use crate::stats::normality::{bootstrap_mean, check_normality, kruskal_wallis, mann_whitney_u};
+use crate::stats::regression::full_linear_regression_diagnostics;
+use crate::stats::sphericity::check_sphericity;
+use crate::stats::survival::analyze_cox_ph;
+use crate::stats::variance::check_variance_homogeneity;
 use crate::ui::charts::{
     bold_text, callout_box, kpi_card, plot_acf, plot_boxplot, plot_calibration, plot_clusters_2d,
     plot_corr_heatmap, plot_elbow_and_silhouette, plot_histogram, plot_leverage_cooks,
     plot_missingness_bars, plot_qq, plot_residuals_vs_fitted, plot_roc, plot_schoenfeld,
     plot_scree, plot_sphericity_profile, primary_button, responsive_two_col, save_svg_button,
-    show_card, show_table, status_badge, table_header_row, TEXT_PRIMARY, TEXT_SECONDARY,
+    secondary_button, show_card, show_table, status_badge, table_header_row, TEXT_PRIMARY,
+    TEXT_SECONDARY,
 };
 use egui::{Color32, ComboBox, RichText, Ui};
 use std::collections::BTreeSet;
@@ -68,27 +67,6 @@ impl ManualTestKind {
     }
 }
 
-pub enum ManualResult {
-    Normality {
-        check: NormalityCheck,
-        boot: Option<BootstrapResult>,
-        values: Vec<f64>,
-    },
-    GroupVariance {
-        variance: VarianceHomogeneityReport,
-        mw: Option<MannWhitneyResult>,
-        kw: Option<KruskalWallisResult>,
-        groups: Vec<(String, Vec<f64>)>,
-    },
-    Sphericity(SphericityReport),
-    Regression(LinearRegressionFullReport),
-    Missing(MissingDataReport),
-    Factor(FactorSuitabilityReport),
-    Logistic(LogisticReport),
-    Survival(CoxSurvivalReport),
-    Clustering(ClusteringReport),
-}
-
 pub struct ManualWorkbench {
     pub active_test: ManualTestKind,
     pub single_col: String,
@@ -105,6 +83,7 @@ pub struct ManualWorkbench {
     pub k_max: usize,
     pub last_error: Option<String>,
     pub last_result: Option<ManualResult>,
+    pub history: Vec<ManualHistoryEntry>,
 }
 
 impl Default for ManualWorkbench {
@@ -125,6 +104,7 @@ impl Default for ManualWorkbench {
             k_max: 8,
             last_error: None,
             last_result: None,
+            history: Vec::new(),
         }
     }
 }
@@ -151,6 +131,7 @@ impl ManualWorkbench {
         self.multi_cols = nums.iter().take(5).cloned().collect();
         self.last_error = None;
         self.last_result = None;
+        self.history.clear();
     }
 
     pub fn render(&mut self, ui: &mut Ui, ds: &Dataset, alpha: f64) {
@@ -279,15 +260,77 @@ impl ManualWorkbench {
             }
 
             ui.add_space(12.0);
-            if primary_button(ui, "  Kjør valgt test  ").clicked() {
-                self.execute(ds, alpha);
-            }
+            ui.horizontal_wrapped(|ui| {
+                if primary_button(ui, "  Kjør valgt test  ").clicked() {
+                    self.execute(ds, alpha);
+                }
+                if !self.history.is_empty() {
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(format!(
+                            "{} manuelle utregninger inkluderes i Appendiks ved PDF-eksport",
+                            self.history.len()
+                        ))
+                        .color(Color32::from_rgb(20, 83, 45))
+                        .strong()
+                        .size(12.5),
+                    );
+                }
+            });
 
             if let Some(ref err) = self.last_error {
                 ui.add_space(8.0);
                 ui.label(RichText::new(format!("Feil: {}", err)).color(Color32::from_rgb(185, 28, 28)).strong());
             }
         });
+
+        if !self.history.is_empty() {
+            ui.add_space(10.0);
+            let mut view_idx: Option<usize> = None;
+            let mut remove_idx: Option<usize> = None;
+            let mut clear_all = false;
+            show_card(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(bold_text(
+                        &format!("Appendiks-logg for PDF-rapport ({} manuelle utregninger)", self.history.len()),
+                        14.0,
+                        TEXT_PRIMARY,
+                    ));
+                    if secondary_button(ui, "Tøm appendiks-logg").clicked() {
+                        clear_all = true;
+                    }
+                });
+                ui.add_space(6.0);
+                show_table(ui, "manual_hist_tbl", |ui| {
+                    table_header_row(ui, &["Ref.", "Tid", "Manuell utregning", "Parametere", "Handlinger"]);
+                    for (i, h) in self.history.iter().enumerate() {
+                        ui.label(bold_text(&format!("A.{}", i + 1), 12.5, TEXT_PRIMARY));
+                        ui.label(RichText::new(&h.timestamp).color(TEXT_SECONDARY));
+                        ui.label(bold_text(&h.title, 12.5, TEXT_PRIMARY));
+                        ui.label(RichText::new(&h.parameters).color(TEXT_SECONDARY));
+                        ui.horizontal(|ui| {
+                            if ui.small_button("Vis").clicked() {
+                                view_idx = Some(i);
+                            }
+                            if ui.small_button("Fjern").clicked() {
+                                remove_idx = Some(i);
+                            }
+                        });
+                        ui.end_row();
+                    }
+                });
+            });
+            if clear_all {
+                self.history.clear();
+            } else {
+                if let Some(i) = view_idx {
+                    self.last_result = Some(self.history[i].result.clone());
+                }
+                if let Some(i) = remove_idx {
+                    self.history.remove(i);
+                }
+            }
+        }
 
         ui.add_space(12.0);
         if let Some(ref res) = self.last_result {
@@ -463,8 +506,68 @@ impl ManualWorkbench {
         };
 
         match run {
-            Ok(r) => self.last_result = Some(r),
+            Ok(r) => {
+                let (title, parameters) = self.describe_entry(alpha);
+                self.history.push(ManualHistoryEntry {
+                    timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                    title,
+                    parameters,
+                    result: r.clone(),
+                });
+                self.last_result = Some(r);
+            }
             Err(e) => self.last_error = Some(e),
+        }
+    }
+
+    fn describe_entry(&self, alpha: f64) -> (String, String) {
+        let multi: Vec<String> = self.multi_cols.iter().cloned().collect();
+        match self.active_test {
+            ManualTestKind::Normality => (
+                format!("Normalfordeling ({})", self.single_col),
+                format!("Variabel = {}, alpha = {:.2}, Bootstrap B = {}", self.single_col, alpha, self.bootstrap_n),
+            ),
+            ManualTestKind::GroupVariance => (
+                format!("Varians & Gruppe ({} per {})", self.single_col, self.group_col),
+                format!("Utfall = {}, Gruppe = {}, alpha = {:.2}", self.single_col, self.group_col, alpha),
+            ),
+            ManualTestKind::Sphericity => (
+                "Sfærisitet (Repeated Measures ANOVA)".to_string(),
+                format!("Målinger = [{}], alpha = {:.2}", multi.join(", "), alpha),
+            ),
+            ManualTestKind::Regression => {
+                let xs: Vec<String> = multi.into_iter().filter(|c| c != &self.target_col).collect();
+                (
+                    format!("Lineær regresjon ({})", self.target_col),
+                    format!("Y = {}, X = [{}], alpha = {:.2}, BG lags = {}, lambda = {:.2}", self.target_col, xs.join(", "), alpha, self.bg_lags, self.ridge_lambda),
+                )
+            }
+            ManualTestKind::Missing => (
+                "Manglende data (Littles MCAR & MICE)".to_string(),
+                format!("Kolonner = [{}], alpha = {:.2}, MICE m = {}", multi.join(", "), alpha, self.mice_m),
+            ),
+            ManualTestKind::Factor => (
+                "Faktoranalyse-egnethet (KMO & Bartlett)".to_string(),
+                format!("Variabler = [{}], alpha = {:.2}", multi.join(", "), alpha),
+            ),
+            ManualTestKind::Logistic => {
+                let xs: Vec<String> = multi.into_iter().filter(|c| c != &self.target_col).collect();
+                (
+                    format!("Logistisk regresjon ({})", self.target_col),
+                    format!("Y = {}, X = [{}], HL grupper = {}, alpha = {:.2}", self.target_col, xs.join(", "), self.hl_groups, alpha),
+                )
+            }
+            ManualTestKind::Survival => {
+                let xs: Vec<String> = multi.into_iter().filter(|c| c != &self.time_col && c != &self.event_col).collect();
+                (
+                    format!("Cox PH & Schoenfeld ({} / {})", self.time_col, self.event_col),
+                    format!("Tid = {}, Hendelse = {}, X = [{}], alpha = {:.2}", self.time_col, self.event_col, xs.join(", "), alpha),
+                )
+            }
+            ManualTestKind::Clustering => (
+                "Klyngeanalyse (Silhouette & Elbow)".to_string(),
+                format!("Variabler = [{}], k_max = {}", multi.join(", "), self.k_max),
+            ),
         }
     }
 }

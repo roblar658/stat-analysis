@@ -1,10 +1,58 @@
 use crate::auto::AutoAnalysisReport;
+use crate::stats::clustering::ClusteringReport;
+use crate::stats::factor::FactorSuitabilityReport;
+use crate::stats::logistic::LogisticReport;
+use crate::stats::missing::MissingDataReport;
+use crate::stats::normality::{
+    BootstrapResult, KruskalWallisResult, MannWhitneyResult, NormalityCheck,
+};
+use crate::stats::regression::LinearRegressionFullReport;
+use crate::stats::sphericity::SphericityReport;
+use crate::stats::survival::CoxSurvivalReport;
+use crate::stats::variance::VarianceHomogeneityReport;
 use std::fmt::Write as FmtWrite;
 use std::io::{Cursor, Write as IoWrite};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
+#[derive(Clone)]
+pub enum ManualCalcResult {
+    Normality {
+        check: NormalityCheck,
+        boot: Option<BootstrapResult>,
+        values: Vec<f64>,
+    },
+    GroupVariance {
+        variance: VarianceHomogeneityReport,
+        mw: Option<MannWhitneyResult>,
+        kw: Option<KruskalWallisResult>,
+        groups: Vec<(String, Vec<f64>)>,
+    },
+    Sphericity(SphericityReport),
+    Regression(LinearRegressionFullReport),
+    Missing(MissingDataReport),
+    Factor(FactorSuitabilityReport),
+    Logistic(LogisticReport),
+    Survival(CoxSurvivalReport),
+    Clustering(ClusteringReport),
+}
+
+#[derive(Clone)]
+pub struct ManualHistoryEntry {
+    pub timestamp: String,
+    pub title: String,
+    pub parameters: String,
+    pub result: ManualCalcResult,
+}
+
 pub fn render_markdown_report(rep: &AutoAnalysisReport) -> String {
+    render_markdown_report_with_appendix(rep, &[])
+}
+
+pub fn render_markdown_report_with_appendix(
+    rep: &AutoAnalysisReport,
+    manual_entries: &[ManualHistoryEntry],
+) -> String {
     let mut md = String::new();
     let _ = writeln!(md, "# Statistisk Diagnostikk- og Modellrapport");
     let _ = writeln!(md, "- **Fil:** `{}`", rep.filename);
@@ -120,6 +168,64 @@ pub fn render_markdown_report(rep: &AutoAnalysisReport) -> String {
         let _ = writeln!(md, "## 9. Klyngeanalyse (Silhouette / Elbow)\n");
         let _ = writeln!(md, "- {}", cl.interpretation);
         let _ = writeln!(md, "- **Anbefaling:** {}\n", cl.recommendation);
+    }
+
+    if !manual_entries.is_empty() {
+        let _ = writeln!(md, "---\n\n# Appendiks — Manuelle utregninger ({} stk.)\n", manual_entries.len());
+        for (idx, entry) in manual_entries.iter().enumerate() {
+            let _ = writeln!(md, "## Appendiks A.{}: {} *(kl. {})*", idx + 1, entry.title, entry.timestamp);
+            let _ = writeln!(md, "- **Parametere:** {}", entry.parameters);
+            match &entry.result {
+                ManualCalcResult::Normality { check, boot, .. } => {
+                    let _ = writeln!(md, "- **Resultat:** {}", check.interpretation);
+                    if let Some(b) = boot {
+                        let _ = writeln!(md, "- **Bootstrap 95% KI (B={}):** [{:.4}, {:.4}] (SE = {:.4})", b.resamples, b.ci_low_95, b.ci_high_95, b.bootstrap_se);
+                    }
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", check.recommendation);
+                }
+                ManualCalcResult::GroupVariance { variance, mw, kw, .. } => {
+                    let _ = writeln!(md, "- **Resultat:** {}", variance.interpretation);
+                    if let Some(m) = mw {
+                        let _ = writeln!(md, "- **Mann-Whitney U:** U = {:.1}, p = {:.4}", m.u_stat, m.p_value);
+                    }
+                    if let Some(k) = kw {
+                        let _ = writeln!(md, "- **Kruskal-Wallis H:** H({}) = {:.3}, p = {:.4}", k.df, k.h_stat, k.p_value);
+                    }
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", variance.recommendation);
+                }
+                ManualCalcResult::Sphericity(sp) => {
+                    let _ = writeln!(md, "- **Resultat:** {}", sp.interpretation);
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", sp.recommendation);
+                }
+                ManualCalcResult::Regression(reg) => {
+                    let _ = writeln!(md, "- **Tilpasning:** R² = {:.4}, Justert R² = {:.4}, RMSE = {:.4}, MAE = {:.4}, AIC = {:.2}, BIC = {:.2}", reg.r_squared, reg.adj_r_squared, reg.rmse, reg.mae, reg.aic, reg.bic);
+                    let _ = writeln!(md, "- **Autokorrelasjon:** {}", reg.autocorrelation.interpretation);
+                    let _ = writeln!(md, "- **Heteroskedastisitet:** {}", reg.heteroscedasticity.interpretation);
+                    let _ = writeln!(md, "- **Uteliggere:** {}\n", reg.outliers.interpretation);
+                }
+                ManualCalcResult::Missing(m) => {
+                    let _ = writeln!(md, "- **Resultat:** {}", m.interpretation);
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", m.recommendation);
+                }
+                ManualCalcResult::Factor(fac) => {
+                    let _ = writeln!(md, "- **Resultat:** {}", fac.interpretation);
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", fac.recommendation);
+                }
+                ManualCalcResult::Logistic(lr) => {
+                    let _ = writeln!(md, "- **Resultat:** {}", lr.interpretation);
+                    let _ = writeln!(md, "- **AIC:** {:.2}, **BIC:** {:.2}, **F1:** {:.3}", lr.aic, lr.bic, lr.confusion_matrix.f1_score);
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", lr.recommendation);
+                }
+                ManualCalcResult::Survival(cox) => {
+                    let _ = writeln!(md, "- **Resultat:** {}", cox.interpretation);
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", cox.recommendation);
+                }
+                ManualCalcResult::Clustering(cl) => {
+                    let _ = writeln!(md, "- **Resultat:** {}", cl.interpretation);
+                    let _ = writeln!(md, "- **Anbefaling:** {}\n", cl.recommendation);
+                }
+            }
+        }
     }
 
     md
@@ -528,6 +634,14 @@ impl PdfBuilder {
 
 /// Generate a genuine multi-page vector PDF report (A4) in pure Rust.
 pub fn render_pdf_report(rep: &AutoAnalysisReport) -> Vec<u8> {
+    render_pdf_report_with_appendix(rep, &[])
+}
+
+/// Generate a multi-page vector PDF report (A4) including all manual calculations as an Appendix section.
+pub fn render_pdf_report_with_appendix(
+    rep: &AutoAnalysisReport,
+    manual_entries: &[ManualHistoryEntry],
+) -> Vec<u8> {
     let mut pdf = PdfBuilder::new();
 
     // Header Banner
@@ -592,6 +706,14 @@ pub fn render_pdf_report(rep: &AutoAnalysisReport) -> Vec<u8> {
             &[86.0, 30.0, 128.0, 48.0, 48.0, 52.0, 52.0, CONTENT_W - 444.0],
             &rows,
         );
+        if !rep.normality_bootstraps.is_empty() {
+            let brows: Vec<Vec<String>> = rep
+                .normality_bootstraps
+                .iter()
+                .map(|b| vec![b.target.clone(), format!("{}", b.resamples), format!("{:.4}", b.observed_mean), format!("{:.4}", b.bootstrap_se), format!("[{:.4}, {:.4}]", b.ci_low_95, b.ci_high_95)])
+                .collect();
+            pdf.table(&["Bootstrap (ikke-normal)", "B", "Snitt", "SE", "95% KI"], &[140.0, 48.0, 82.0, 82.0, CONTENT_W - 352.0], &brows);
+        }
     }
 
     // 2. Variance Homogeneity
@@ -617,6 +739,34 @@ pub fn render_pdf_report(rep: &AutoAnalysisReport) -> Vec<u8> {
             }
         }
         pdf.table(&["Test", "Statistikk", "df", "p-verdi"], &[210.0, 120.0, 85.0, CONTENT_W - 415.0], &rows);
+        if !rep.extra_group_checks.is_empty() {
+            let xrows: Vec<Vec<String>> = rep
+                .extra_group_checks
+                .iter()
+                .map(|(evh, efb)| {
+                    let np = if let Some(ref mw) = efb.mann_whitney {
+                        format!("MW p={:.4}", mw.p_value)
+                    } else if let Some(ref kw) = efb.kruskal_wallis {
+                        format!("KW p={:.4}", kw.p_value)
+                    } else {
+                        "-".into()
+                    };
+                    vec![
+                        evh.value_col.clone(),
+                        format!("{:.4}", evh.levene_median.p_value),
+                        format!("{:.4}", evh.bartlett.p_value),
+                        format!("{:.4}", evh.welch_anova.p_value),
+                        np,
+                        evh.status.to_uppercase(),
+                    ]
+                })
+                .collect();
+            pdf.table(
+                &["Øvrige utfall per gruppe", "Levene p", "Bartlett p", "Welch p", "Ikke-param.", "Status"],
+                &[132.0, 68.0, 68.0, 68.0, 102.0, CONTENT_W - 438.0],
+                &xrows,
+            );
+        }
     }
 
     // 3. Sphericity
@@ -876,21 +1026,283 @@ pub fn render_pdf_report(rep: &AutoAnalysisReport) -> Vec<u8> {
         pdf.table(&["Antall klynger", "WCSS (Elbow)", "Silhouette-skår"], &[140.0, 175.0, CONTENT_W - 315.0], &rows);
     }
 
+    // =========================================================================
+    // APPENDIKS: Alle manuelle utregninger fra Manuell testbenk
+    // =========================================================================
+    if !manual_entries.is_empty() {
+        pdf.new_page();
+        pdf.draw_rect_fill(MARGIN_L, pdf.y - 48.0, CONTENT_W, 50.0, 0.118, 0.161, 0.231);
+        pdf.draw_text(
+            MARGIN_L + 14.0,
+            pdf.y - 20.0,
+            "F2",
+            16.0,
+            1.0,
+            1.0,
+            1.0,
+            "APPENDIKS — Manuelle utregninger",
+        );
+        pdf.draw_text(
+            MARGIN_L + 14.0,
+            pdf.y - 36.0,
+            "F1",
+            9.2,
+            0.800,
+            0.855,
+            0.930,
+            &format!(
+                "Alle egendefinerte tester kjørt i Manuell testbenk ({} stk.) for {}",
+                manual_entries.len(),
+                rep.filename
+            ),
+        );
+        pdf.y -= 64.0;
+
+        for (idx, entry) in manual_entries.iter().enumerate() {
+            pdf.section_heading(&format!(
+                "Appendiks A.{}: {} (kl. {})",
+                idx + 1,
+                entry.title,
+                entry.timestamp
+            ));
+            pdf.paragraph(&entry.parameters, Some("Valgte kolonner og parametere"));
+
+            match &entry.result {
+                ManualCalcResult::Normality { check, boot, .. } => {
+                    pdf.paragraph(&check.interpretation, Some("Resultat"));
+                    pdf.paragraph(&check.recommendation, Some("Anbefalt tiltak"));
+                    let mut rows = vec![
+                        vec!["Anbefalt test".into(), check.recommended_test.clone(), format!("{:.4}", check.primary_statistic), format!("{:.4}", check.primary_p_value), check.status.to_uppercase()],
+                    ];
+                    if let Some(ref sw) = check.shapiro_wilk {
+                        rows.push(vec!["Shapiro-Wilk".into(), format!("n = {}", sw.n), format!("W = {:.4}", sw.w), format!("{:.4}", sw.p_value), if sw.p_value >= 0.05 { "OK".into() } else { "BRUTT".into() }]);
+                    }
+                    rows.push(vec!["Kolmogorov-Smirnov (Lilliefors)".into(), format!("n = {}", check.ks_test.n), format!("D = {:.4}", check.ks_test.d_stat), format!("{:.4}", check.ks_test.p_value_lilliefors), if check.ks_test.p_value_lilliefors >= 0.05 { "OK".into() } else { "BRUTT".into() }]);
+                    rows.push(vec!["Skjevhet / Eksess-kurtose".into(), format!("Snitt {:.3}, SD {:.3}", check.mean, check.std_dev), format!("{:.3} / {:.3}", check.skewness, check.excess_kurtosis), "-".into(), check.status.to_uppercase()]);
+                    if let Some(ref b) = boot {
+                        rows.push(vec![format!("Bootstrap (B = {})", b.resamples), format!("Snitt {:.4}, SE {:.4}", b.observed_mean, b.bootstrap_se), format!("[{:.4}, {:.4}]", b.ci_low_95, b.ci_high_95), "95% KI".into(), "OK".into()]);
+                    }
+                    pdf.table(&["Test / Mål", "Detaljer", "Verdi / KI", "p-verdi", "Status"], &[138.0, 128.0, 118.0, 62.0, CONTENT_W - 446.0], &rows);
+                }
+                ManualCalcResult::GroupVariance { variance, mw, kw, .. } => {
+                    pdf.paragraph(&variance.interpretation, Some("Resultat"));
+                    pdf.paragraph(&variance.recommendation, Some("Anbefalt tiltak"));
+                    let mut rows = vec![
+                        vec!["Levene (median / Brown-Forsythe)".into(), format!("F = {:.3}", variance.levene_median.f_stat), format!("{}, {}", variance.levene_median.df1, variance.levene_median.df2), format!("{:.4}", variance.levene_median.p_value)],
+                        vec!["Levene (gjennomsnitt)".into(), format!("F = {:.3}", variance.levene_mean.f_stat), format!("{}, {}", variance.levene_mean.df1, variance.levene_mean.df2), format!("{:.4}", variance.levene_mean.p_value)],
+                        vec!["Bartletts test".into(), format!("chi2 = {:.3}", variance.bartlett.chi2_stat), format!("{}", variance.bartlett.df), format!("{:.4}", variance.bartlett.p_value)],
+                        vec!["Welchs ANOVA".into(), format!("F = {:.3}", variance.welch_anova.f_stat), format!("{:.1}, {:.1}", variance.welch_anova.df1, variance.welch_anova.df2), format!("{:.4}", variance.welch_anova.p_value)],
+                    ];
+                    if let Some(ref wt) = variance.welch_t_test {
+                        rows.push(vec!["Welchs t-test".into(), format!("t = {:.3}", wt.t_stat), format!("{:.1}", wt.df), format!("{:.4}", wt.p_value)]);
+                    }
+                    if let Some(ref m) = mw {
+                        rows.push(vec!["Mann-Whitney U".into(), format!("U = {:.1} (Z = {:.2})", m.u_stat, m.z_stat), "-".into(), format!("{:.4}", m.p_value)]);
+                    }
+                    if let Some(ref k) = kw {
+                        rows.push(vec!["Kruskal-Wallis H".into(), format!("H = {:.3}", k.h_stat), format!("{}", k.df), format!("{:.4}", k.p_value)]);
+                    }
+                    pdf.table(&["Test", "Statistikk", "df", "p-verdi"], &[210.0, 125.0, 82.0, CONTENT_W - 417.0], &rows);
+
+                    let grp_rows: Vec<Vec<String>> = variance
+                        .group_summaries
+                        .iter()
+                        .map(|g| vec![g.name.clone(), format!("{}", g.n), format!("{:.3}", g.mean), format!("{:.3}", g.median), format!("{:.3}", g.std_dev), format!("{:.3}", g.variance)])
+                        .collect();
+                    pdf.table(&["Gruppe", "n", "Snitt", "Median", "Std.avvik", "Varians"], &[130.0, 45.0, 82.0, 82.0, 82.0, CONTENT_W - 421.0], &grp_rows);
+                }
+                ManualCalcResult::Sphericity(sp) => {
+                    pdf.paragraph(&sp.interpretation, Some("Resultat"));
+                    pdf.paragraph(&sp.recommendation, Some("Anbefalt tiltak"));
+                    let rows = vec![
+                        vec!["Mauchlys sfærisitetstest".into(), format!("W = {:.4}, chi2({}) = {:.3}", sp.mauchly_w, sp.chi2_df, sp.chi2_stat), format!("{:.4}", sp.mauchly_p_value)],
+                        vec!["RM-ANOVA (ukorrigert)".into(), format!("F({:.1}, {:.1}) = {:.3}", sp.df1_uncorrected, sp.df2_uncorrected, sp.rm_anova_f), format!("{:.4}", sp.p_uncorrected)],
+                        vec!["Greenhouse-Geisser".into(), format!("eps = {:.3}", sp.epsilon_gg), format!("{:.4}", sp.p_greenhouse_geisser)],
+                        vec!["Huynh-Feldt".into(), format!("eps = {:.3}", sp.epsilon_hf), format!("{:.4}", sp.p_huynh_feldt)],
+                    ];
+                    pdf.table(&["Metode", "Statistikk / Epsilon", "p-verdi"], &[185.0, 210.0, CONTENT_W - 395.0], &rows);
+                }
+                ManualCalcResult::Regression(reg) => {
+                    pdf.paragraph(
+                        &format!(
+                            "n = {}, R² = {:.4}, Justert R² = {:.4}, RMSE = {:.4}, MAE = {:.4}, F = {:.2} (p = {:.4}), AIC = {:.2}, BIC = {:.2}.",
+                            reg.n, reg.r_squared, reg.adj_r_squared, reg.rmse, reg.mae, reg.f_stat, reg.f_p_value, reg.aic, reg.bic
+                        ),
+                        Some("Modelltilpasning"),
+                    );
+                    let coef_rows: Vec<Vec<String>> = reg
+                        .coefficients
+                        .iter()
+                        .enumerate()
+                        .map(|(i, c)| {
+                            let h3 = &reg.heteroscedasticity.hc3_coefs[i];
+                            let nw = &reg.autocorrelation.newey_west_coefs[i];
+                            vec![
+                                c.name.clone(),
+                                format!("{:.4}", c.estimate),
+                                format!("{:.4} ({:.4})", c.std_error, c.p_value),
+                                format!("{:.4} ({:.4})", h3.std_error, h3.p_value),
+                                format!("{:.4} ({:.4})", nw.std_error, nw.p_value),
+                            ]
+                        })
+                        .collect();
+                    pdf.table(&["Variabel", "Estimat", "OLS SE (p)", "HC3 SE (p)", "Newey-West SE (p)"], &[120.0, 72.0, 105.0, 105.0, CONTENT_W - 402.0], &coef_rows);
+
+                    if let Some(ref mc) = reg.multicollinearity {
+                        let vif_rows: Vec<Vec<String>> = mc
+                            .vifs
+                            .iter()
+                            .map(|v| vec![v.variable.clone(), format!("{:.2}", v.vif), format!("{:.4}", v.r_squared_aux), v.severity.to_uppercase()])
+                            .collect();
+                        pdf.table(&["Prediktor (VIF)", "VIF", "Hjelpe-R²", "Status"], &[180.0, 85.0, 110.0, CONTENT_W - 375.0], &vif_rows);
+                    }
+                    pdf.paragraph(&format!("{} {}", reg.autocorrelation.interpretation, reg.autocorrelation.recommendation), Some("Autokorrelasjon"));
+                    pdf.paragraph(&format!("{} {}", reg.heteroscedasticity.interpretation, reg.heteroscedasticity.recommendation), Some("Heteroskedastisitet"));
+                    pdf.paragraph(&format!("{} {}", reg.outliers.interpretation, reg.outliers.recommendation), Some("Uteliggere & innflytelse"));
+
+                    let cmp_rows: Vec<Vec<String>> = reg
+                        .model_comparison
+                        .iter()
+                        .map(|m| vec![m.model_name.clone(), format!("{}", m.k_params), format!("{:.4}", m.r_squared), format!("{:.4}", m.adj_r_squared), format!("{:.3}", m.rmse), format!("{:.2}", m.aic), format!("{:.2}", m.bic)])
+                        .collect();
+                    pdf.table(&["Modell (AIC/BIC)", "k", "R²", "Just. R²", "RMSE", "AIC", "BIC"], &[175.0, 30.0, 56.0, 60.0, 62.0, 62.0, CONTENT_W - 445.0], &cmp_rows);
+
+                    // Embedded vector Residual & ACF charts
+                    pdf.ensure_space(160.0);
+                    let chart_h = 142.0;
+                    let chart_w = (CONTENT_W - 12.0) / 2.0;
+                    let y_top = pdf.y;
+                    let (px, py, pw, ph) = pdf.draw_mini_chart_box(MARGIN_L, y_top, chart_w, chart_h, "Residualer mot predikert", "Predikert", "Residual");
+                    if !reg.fitted.is_empty() {
+                        let min_x = reg.fitted.iter().copied().fold(f64::INFINITY, f64::min);
+                        let max_x = reg.fitted.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                        let max_y = reg.residuals.iter().map(|v| v.abs()).fold(1e-6, f64::max) * 1.1;
+                        let sx = (max_x - min_x).max(1e-9);
+                        let y0 = py + ph / 2.0;
+                        pdf.draw_line(px, y0, px + pw, y0, 0.7, 0.86, 0.15, 0.15);
+                        for (&fx, &ry) in reg.fitted.iter().zip(reg.residuals.iter()) {
+                            let cx = px + ((fx - min_x) / sx) * pw;
+                            let cy = py + ((ry + max_y) / (2.0 * max_y)) * ph;
+                            pdf.draw_rect_fill(cx - 1.3, cy - 1.3, 2.6, 2.6, 0.114, 0.306, 0.847);
+                        }
+                    }
+                    let rx = MARGIN_L + chart_w + 12.0;
+                    let (apx, apy, apw, aph) = pdf.draw_mini_chart_box(rx, y_top, chart_w, chart_h, "ACF-plott (Residualer)", "Lag", "ACF");
+                    let ay0 = apy + aph / 2.0;
+                    let cb = reg.autocorrelation.acf_conf_bound.min(0.95);
+                    pdf.draw_line(apx, ay0, apx + apw, ay0, 0.6, 0.3, 0.35, 0.45);
+                    pdf.draw_line(apx, apy + ((cb + 1.0) / 2.0) * aph, apx + apw, apy + ((cb + 1.0) / 2.0) * aph, 0.6, 0.86, 0.15, 0.15);
+                    pdf.draw_line(apx, apy + ((-cb + 1.0) / 2.0) * aph, apx + apw, apy + ((-cb + 1.0) / 2.0) * aph, 0.6, 0.86, 0.15, 0.15);
+                    let n_acf = reg.autocorrelation.acf_lags.len().max(1);
+                    let slot = apw / n_acf as f64;
+                    for (i_lag, &(_lag, val)) in reg.autocorrelation.acf_lags.iter().enumerate() {
+                        let bx = apx + (i_lag as f64 + 0.25) * slot;
+                        let bw = (slot * 0.5).clamp(2.0, 9.0);
+                        let yv = apy + ((val.clamp(-1.0, 1.0) + 1.0) / 2.0) * aph;
+                        let (r, g, b) = if val.abs() > cb { (0.86, 0.15, 0.15) } else { (0.114, 0.306, 0.847) };
+                        pdf.draw_rect_fill(bx, ay0.min(yv), bw, (ay0 - yv).abs().max(1.0), r, g, b);
+                    }
+                    pdf.y -= chart_h + 14.0;
+                }
+                ManualCalcResult::Missing(m) => {
+                    pdf.paragraph(&m.interpretation, Some("Resultat"));
+                    pdf.paragraph(&m.recommendation, Some("Anbefalt tiltak"));
+                    if !m.mice_summary.is_empty() {
+                        let rows: Vec<Vec<String>> = m
+                            .mice_summary
+                            .iter()
+                            .map(|x| vec![x.column.clone(), format!("{:.4}", x.complete_case_mean), format!("{:.4}", x.fiml_em_mean), format!("{:.4}", x.mice_pooled_mean), format!("{:.4}", x.mice_pooled_se)])
+                            .collect();
+                        pdf.table(&["Kolonne", "Komplett snitt", "FIML (EM) snitt", "MICE snitt", "MICE SE"], &[130.0, 95.0, 95.0, 95.0, CONTENT_W - 415.0], &rows);
+                    }
+                }
+                ManualCalcResult::Factor(fac) => {
+                    pdf.paragraph(&fac.interpretation, Some("Resultat"));
+                    pdf.paragraph(&fac.recommendation, Some("Anbefalt tiltak"));
+                    let rows: Vec<Vec<String>> = fac
+                        .per_variable_msa
+                        .iter()
+                        .map(|v| vec![v.variable.clone(), format!("{:.3}", v.msa), format!("{:.3}", v.max_abs_corr)])
+                        .collect();
+                    pdf.table(&["Variabel", "Individuell MSA", "Maks |r| mot andre"], &[200.0, 150.0, CONTENT_W - 350.0], &rows);
+                }
+                ManualCalcResult::Logistic(lr) => {
+                    pdf.paragraph(&lr.interpretation, Some("Resultat"));
+                    pdf.paragraph(&lr.recommendation, Some("Anbefalt tiltak"));
+                    let coef_rows: Vec<Vec<String>> = lr
+                        .coefficients
+                        .iter()
+                        .map(|c| vec![c.name.clone(), format!("{:.4}", c.estimate), format!("{:.3}", c.odds_ratio), format!("{:.4}", c.std_error), format!("{:.2}", c.z_stat), format!("{:.4}", c.p_value)])
+                        .collect();
+                    pdf.table(&["Variabel", "Log-odds", "Odds Ratio", "SE", "z", "p-verdi"], &[140.0, 75.0, 78.0, 75.0, 62.0, CONTENT_W - 430.0], &coef_rows);
+
+                    pdf.ensure_space(155.0);
+                    let ch = 138.0;
+                    let cw = (CONTENT_W - 12.0) / 2.0;
+                    let yt = pdf.y;
+                    let (px, py, pw, ph) = pdf.draw_mini_chart_box(MARGIN_L, yt, cw, ch, &format!("ROC-kurve (AUC = {:.3})", lr.auc), "FPR", "TPR");
+                    pdf.draw_line(px, py, px + pw, py + ph, 0.6, 0.6, 0.65, 0.72);
+                    for w in lr.roc_points.windows(2) {
+                        pdf.draw_line(px + w[0].fpr.clamp(0.0, 1.0) * pw, py + w[0].tpr.clamp(0.0, 1.0) * ph, px + w[1].fpr.clamp(0.0, 1.0) * pw, py + w[1].tpr.clamp(0.0, 1.0) * ph, 1.4, 0.114, 0.306, 0.847);
+                    }
+                    let rx = MARGIN_L + cw + 12.0;
+                    let (cpx, cpy, cpw, cph) = pdf.draw_mini_chart_box(rx, yt, cw, ch, "Hosmer-Lemeshow kalibrering", "Forventet", "Observert");
+                    pdf.draw_line(cpx, cpy, cpx + cpw, cpy + cph, 0.6, 0.08, 0.55, 0.35);
+                    for w in lr.hosmer_lemeshow.bins.windows(2) {
+                        pdf.draw_line(cpx + w[0].expected_rate.clamp(0.0, 1.0) * cpw, cpy + w[0].observed_rate.clamp(0.0, 1.0) * cph, cpx + w[1].expected_rate.clamp(0.0, 1.0) * cpw, cpy + w[1].observed_rate.clamp(0.0, 1.0) * cph, 1.2, 0.114, 0.306, 0.847);
+                    }
+                    pdf.y -= ch + 14.0;
+                }
+                ManualCalcResult::Survival(cox) => {
+                    pdf.paragraph(&cox.interpretation, Some("Resultat"));
+                    pdf.paragraph(&cox.recommendation, Some("Anbefalt tiltak"));
+                    let rows: Vec<Vec<String>> = cox
+                        .coefficients
+                        .iter()
+                        .enumerate()
+                        .map(|(i, c)| {
+                            let st = &cox.schoenfeld_tests[i];
+                            vec![c.name.clone(), format!("{:.3}", c.hazard_ratio), format!("{:.4}", c.p_value), format!("{:.3}", st.rho_time), format!("{:.4}", st.p_value), if st.ph_met { "OK".into() } else { "BRUTT".into() }]
+                        })
+                        .collect();
+                    pdf.table(&["Kovariat", "Hazard Ratio", "Wald p", "Schoenfeld r", "Schoenfeld p", "PH"], &[130.0, 80.0, 75.0, 80.0, 80.0, CONTENT_W - 445.0], &rows);
+                }
+                ManualCalcResult::Clustering(cl) => {
+                    pdf.paragraph(&cl.interpretation, Some("Resultat"));
+                    pdf.paragraph(&cl.recommendation, Some("Anbefalt tiltak"));
+                    let rows: Vec<Vec<String>> = cl
+                        .k_evals
+                        .iter()
+                        .map(|e| vec![format!("k = {}", e.k), format!("{:.2}", e.wcss), if e.k >= 2 { format!("{:.4}", e.silhouette) } else { "-".into() }])
+                        .collect();
+                    pdf.table(&["Antall klynger", "WCSS (Elbow)", "Silhouette-skår"], &[140.0, 175.0, CONTENT_W - 315.0], &rows);
+                }
+            }
+        }
+    }
+
     pdf.finish()
 }
 
 /// Bundle PDF report, Markdown report, JSON data, and all individual SVG visualizations into a ZIP archive.
 pub fn build_zip_bundle(rep: &AutoAnalysisReport) -> Result<Vec<u8>, String> {
+    build_zip_bundle_with_appendix(rep, &[])
+}
+
+pub fn build_zip_bundle_with_appendix(
+    rep: &AutoAnalysisReport,
+    manual_entries: &[ManualHistoryEntry],
+) -> Result<Vec<u8>, String> {
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut zip = ZipWriter::new(&mut cursor);
         let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
-        let pdf_bytes = render_pdf_report(rep);
+        let pdf_bytes = render_pdf_report_with_appendix(rep, manual_entries);
         zip.start_file("rapport.pdf", opts).map_err(|e| e.to_string())?;
         zip.write_all(&pdf_bytes).map_err(|e| e.to_string())?;
 
-        let md = render_markdown_report(rep);
+        let md = render_markdown_report_with_appendix(rep, manual_entries);
         zip.start_file("rapport.md", opts).map_err(|e| e.to_string())?;
         zip.write_all(md.as_bytes()).map_err(|e| e.to_string())?;
 

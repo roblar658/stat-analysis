@@ -4,7 +4,10 @@ pub mod views;
 
 use crate::auto::{run_automatic_analysis, AutoAnalysisReport};
 use crate::data::Dataset;
-use crate::report::{build_zip_bundle, render_markdown_report, render_pdf_report};
+use crate::report::{
+    build_zip_bundle_with_appendix, render_markdown_report_with_appendix,
+    render_pdf_report_with_appendix,
+};
 use crate::ui::charts::{
     primary_button, responsive_two_col, show_card, status_dot_color, BORDER_DEFAULT, PRIMARY_BLUE,
     SURFACE_CARD, TEXT_PRIMARY, TEXT_SECONDARY,
@@ -200,7 +203,9 @@ impl StatApp {
             .add_filter("ZIP-arkiv", &["zip"])
             .save_file()
         {
-            match build_zip_bundle(rep).and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string())) {
+            match build_zip_bundle_with_appendix(rep, &self.manual.history)
+                .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()))
+            {
                 Ok(_) => self.status_toast = Some((format!("Lagret ZIP-pakke til {}", path.display()), false)),
                 Err(e) => self.status_toast = Some((format!("Eksportfeil: {}", e), true)),
             }
@@ -214,7 +219,7 @@ impl StatApp {
             .add_filter("Markdown", &["md"])
             .save_file()
         {
-            match std::fs::write(&path, render_markdown_report(rep)) {
+            match std::fs::write(&path, render_markdown_report_with_appendix(rep, &self.manual.history)) {
                 Ok(_) => self.status_toast = Some((format!("Lagret Markdown-rapport til {}", path.display()), false)),
                 Err(e) => self.status_toast = Some((format!("Eksportfeil: {}", e), true)),
             }
@@ -228,8 +233,16 @@ impl StatApp {
             .add_filter("PDF-dokument", &["pdf"])
             .save_file()
         {
-            match std::fs::write(&path, render_pdf_report(rep)) {
-                Ok(_) => self.status_toast = Some((format!("Lagret PDF-rapport til {}", path.display()), false)),
+            let n_app = self.manual.history.len();
+            match std::fs::write(&path, render_pdf_report_with_appendix(rep, &self.manual.history)) {
+                Ok(_) => {
+                    let msg = if n_app > 0 {
+                        format!("Lagret PDF-rapport (inkl. {} manuelle utregninger i Appendiks) til {}", n_app, path.display())
+                    } else {
+                        format!("Lagret PDF-rapport til {}", path.display())
+                    };
+                    self.status_toast = Some((msg, false));
+                }
                 Err(e) => self.status_toast = Some((format!("Eksportfeil: {}", e), true)),
             }
         }
@@ -475,15 +488,20 @@ impl eframe::App for StatApp {
 
                     if self.report.is_some() {
                         ui.separator();
+                        let app_suffix = if self.manual.history.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" — inkl. {} i Appendiks", self.manual.history.len())
+                        };
                         ui.menu_button(
                             RichText::new("Eksporter rapport / SVG ▾").strong().color(TEXT_PRIMARY),
                             |ui| {
                                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                                if ui.button("Lagre PDF-rapport (.pdf)...").clicked() {
+                                if ui.button(format!("Lagre PDF-rapport (.pdf{})...", app_suffix)).clicked() {
                                     ui.close_menu();
                                     self.export_pdf();
                                 }
-                                if ui.button("Lagre alt som ZIP (PDF-rapport + alle SVG-figurer)...").clicked() {
+                                if ui.button(format!("Lagre alt som ZIP (PDF{} + alle SVG-figurer)...", app_suffix)).clicked() {
                                     ui.close_menu();
                                     self.export_zip();
                                 }

@@ -45,16 +45,18 @@ pub struct AutoAnalysisReport {
     pub col_count: usize,
     pub columns: Vec<ColumnInfo>,
     pub summary_badges: Vec<SummaryBadge>,
-    // Part 1: Assumptions
+    // Assumptions
     pub normality_checks: Vec<NormalityCheck>,
+    pub normality_bootstraps: Vec<BootstrapResult>,
     pub variance_homogeneity: Option<VarianceHomogeneityReport>,
     pub group_fallbacks: Option<GroupFallbackTests>,
+    pub extra_group_checks: Vec<(VarianceHomogeneityReport, GroupFallbackTests)>,
     pub sphericity: Option<SphericityReport>,
     pub missing_data: MissingDataReport,
     pub factor_suitability: Option<FactorSuitabilityReport>,
-    // Part 1 + 2: Linear Regression & Diagnostics
+    // Linear Regression & Diagnostics
     pub linear_regression: Option<LinearRegressionFullReport>,
-    // Part 2: Logistic, Survival, Clustering
+    // Logistic, Survival, Clustering
     pub logistic_regression: Option<LogisticReport>,
     pub cox_survival: Option<CoxSurvivalReport>,
     pub clustering: Option<ClusteringReport>,
@@ -217,11 +219,17 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
         action: missing_data.recommendation.clone(),
     });
 
-    // 2. Normality checks for all numeric columns (up to 8 charts)
+    // 2. Normality checks for all numeric columns + automatic Bootstrap fallback for non-normal variables
     let mut normality_checks = Vec::new();
+    let mut normality_bootstraps = Vec::new();
     for (idx, col) in all_num_cols.iter().enumerate() {
         if let Ok(vals) = ds.get_numeric_values(col) {
             if let Ok(nc) = check_normality(col, &vals, alpha) {
+                if !nc.is_normal {
+                    if let Ok(b) = bootstrap_mean(col, &vals, 1000) {
+                        normality_bootstraps.push(b);
+                    }
+                }
                 if idx < 4 {
                     let cid = sanitize_id(col);
                     charts.push(NamedChart {
@@ -272,70 +280,85 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
         });
     }
 
-    // 3. Variance Homogeneity + Non-parametric fallbacks (if grouping column exists)
+    // 3. Variance Homogeneity + Non-parametric fallbacks across all relevant numeric outcomes
     let group_cols = ds.grouping_column_names();
     let mut variance_homogeneity = None;
     let mut group_fallbacks = None;
+    let mut extra_group_checks: Vec<(VarianceHomogeneityReport, GroupFallbackTests)> = Vec::new();
 
     if let (Some(g_col), Some(v_col)) = (group_cols.first(), all_num_cols.first()) {
-        // Prefer a numeric target-like column if available
+        // Prefer a numeric target-like column as primary
         let target_v = all_num_cols
             .iter()
             .find(|c| {
                 let l = c.to_ascii_lowercase();
                 l == "y" || l.contains("score") || l.contains("outcome") || l.contains("utfall")
             })
-            .unwrap_or(v_col);
+            .unwrap_or(v_col)
+            .clone();
 
-        if let Ok(map) = ds.get_grouped_values(target_v, g_col) {
-            let groups: Vec<(String, Vec<f64>)> = map
-                .into_iter()
-                .filter(|(_, v)| v.len() >= 2)
-                .collect();
-            if groups.len() >= 2 {
-                if let Ok(vh) = check_variance_homogeneity(target_v, g_col, &groups, alpha) {
-                    charts.push(NamedChart {
-                        id: "boxplot_groups".to_string(),
-                        filename: "03_boksplott_grupper.svg".to_string(),
-                        title: format!("Boksplott: {} per {}", target_v, g_col),
-                        category: "Varianshomogenitet".to_string(),
-                        description: vh.interpretation.clone(),
-                        svg: svg_boxplot(
-                            &format!("Boksplott: {} fordelt på {}", target_v, g_col),
-                            target_v,
-                            &groups,
-                        ),
-                    });
-                    summary_badges.push(SummaryBadge {
-                        check_name: "Varianshomogenitet (Levene / Bartlett)".to_string(),
-                        category: "Forutsetninger".to_string(),
-                        status: vh.status.clone(),
-                        headline: format!(
-                            "Levene p = {:.4} | Bartlett p = {:.4}",
-                            vh.levene_median.p_value, vh.bartlett.p_value
-                        ),
-                        action: vh.recommendation.clone(),
-                    });
-                    variance_homogeneity = Some(vh);
+        let mut ordered_outcomes = vec![target_v.clone()];
+        for c in &all_num_cols {
+            if c != &target_v && c != g_col && ordered_outcomes.len() < 6 {
+                ordered_outcomes.push(c.clone());
+            }
+        }
 
-                    // Compute non-parametric & bootstrap fallbacks too
-                    let mw = if groups.len() == 2 {
-                        mann_whitney_u(&groups[0].0, &groups[0].1, &groups[1].0, &groups[1].1, alpha).ok()
-                    } else {
-                        None
-                    };
-                    let kw = kruskal_wallis(&groups, alpha).ok();
-                    let bootstraps: Vec<BootstrapResult> = groups
-                        .iter()
-                        .filter_map(|(gn, gv)| bootstrap_mean(&format!("{} ({})", target_v, gn), gv, 1000).ok())
-                        .collect();
-                    group_fallbacks = Some(GroupFallbackTests {
-                        value_col: target_v.clone(),
-                        group_col: g_col.clone(),
-                        mann_whitney: mw,
-                        kruskal_wallis: kw,
-                        bootstraps,
-                    });
+        for (oi, out_col) in ordered_outcomes.iter().enumerate() {
+            if let Ok(map) = ds.get_grouped_values(out_col, g_col) {
+                let groups: Vec<(String, Vec<f64>)> = map
+                    .into_iter()
+                    .filter(|(_, v)| v.len() >= 2)
+                    .collect();
+                if groups.len() >= 2 {
+                    if let Ok(vh) = check_variance_homogeneity(out_col, g_col, &groups, alpha) {
+                        let mw = if groups.len() == 2 {
+                            mann_whitney_u(&groups[0].0, &groups[0].1, &groups[1].0, &groups[1].1, alpha).ok()
+                        } else {
+                            None
+                        };
+                        let kw = kruskal_wallis(&groups, alpha).ok();
+                        let bootstraps: Vec<BootstrapResult> = groups
+                            .iter()
+                            .filter_map(|(gn, gv)| bootstrap_mean(&format!("{} ({})", out_col, gn), gv, 1000).ok())
+                            .collect();
+                        let fb = GroupFallbackTests {
+                            value_col: out_col.clone(),
+                            group_col: g_col.clone(),
+                            mann_whitney: mw,
+                            kruskal_wallis: kw,
+                            bootstraps,
+                        };
+
+                        if oi == 0 {
+                            charts.push(NamedChart {
+                                id: "boxplot_groups".to_string(),
+                                filename: "03_boksplott_grupper.svg".to_string(),
+                                title: format!("Boksplott: {} per {}", out_col, g_col),
+                                category: "Varianshomogenitet".to_string(),
+                                description: vh.interpretation.clone(),
+                                svg: svg_boxplot(
+                                    &format!("Boksplott: {} fordelt på {}", out_col, g_col),
+                                    out_col,
+                                    &groups,
+                                ),
+                            });
+                            summary_badges.push(SummaryBadge {
+                                check_name: "Varianshomogenitet (Levene / Bartlett)".to_string(),
+                                category: "Forutsetninger".to_string(),
+                                status: vh.status.clone(),
+                                headline: format!(
+                                    "Levene p = {:.4} | Bartlett p = {:.4}",
+                                    vh.levene_median.p_value, vh.bartlett.p_value
+                                ),
+                                action: vh.recommendation.clone(),
+                            });
+                            variance_homogeneity = Some(vh);
+                            group_fallbacks = Some(fb);
+                        } else {
+                            extra_group_checks.push((vh, fb));
+                        }
+                    }
                 }
             }
         }
@@ -770,8 +793,10 @@ pub fn run_automatic_analysis(ds: &Dataset, alpha: f64) -> AutoAnalysisReport {
         columns: ds.columns.clone(),
         summary_badges,
         normality_checks,
+        normality_bootstraps,
         variance_homogeneity,
         group_fallbacks,
+        extra_group_checks,
         sphericity,
         missing_data,
         factor_suitability,
